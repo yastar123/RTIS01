@@ -1,11 +1,19 @@
-<div align="center">
+# Rumah Terapy Ikhtiar Sehat
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+Website klinik TCM dengan React, Express, PostgreSQL, Drizzle ORM, dan Tailwind CSS.
 
-  <h1>Built with AI Studio</h2>
+## Development
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+Isi `DATABASE_URL` dengan connection string PostgreSQL dan `SESSION_SECRET` dengan nilai acak.
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+Jalankan `npm run db:push` untuk membuat tabel, lalu `npm run dev`.
 
-</div>
+Express melayani API `/api/*` dan Vite melayani React melalui port 5000.
+
+## Built with
+
+- React + Vite
+- Express
+- PostgreSQL + Drizzle ORM
+- TypeScript
+- Tailwind CSS

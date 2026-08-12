@@ -1,0 +1,1 @@
+> This project uses React, Express, PostgreSQL, Drizzle ORM, and Tailwind CSS.

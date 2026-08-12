@@ -1,0 +1,6 @@
+{
+  "name": "Rumah Terapy Ikhtiar Sehat",
+  "description": "Klinik Rumah Sehat Tradisional Chinese Medicine dengan layanan terapi holistik, skrining mandiri, artikel, dan reservasi online.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
