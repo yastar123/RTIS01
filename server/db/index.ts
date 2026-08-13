@@ -153,6 +153,122 @@ const mockScreeningQuestions: any[] = [
   },
 ];
 
+const mockServices: any[] = [
+  {
+    id: "srv-1",
+    name: "Akupunktur",
+    price: 150000,
+    duration: "± 60 menit",
+    description: "Penusukan titik meridian untuk meredakan nyeri dan menyeimbangkan energi tubuh.",
+    createdAt: new Date(),
+  },
+  {
+    id: "srv-2",
+    name: "Herbal Formula",
+    price: 120000,
+    duration: "± 30 menit",
+    description: "Konsultasi dan peresepan formula herbal sesuai pola tubuh Anda.",
+    createdAt: new Date(),
+  },
+  {
+    id: "srv-3",
+    name: "Tuina",
+    price: 130000,
+    duration: "± 60 menit",
+    description: "Terapi pijat tekan TCM untuk otot kaku, pegal, dan gangguan sendi.",
+    createdAt: new Date(),
+  },
+  {
+    id: "srv-4",
+    name: "BSM (Body Space Medicine)",
+    price: 175000,
+    duration: "± 45 menit",
+    description: "Pendekatan pergerakan energi antar organ untuk keluhan kronis.",
+    createdAt: new Date(),
+  },
+  {
+    id: "srv-5",
+    name: "Konseling",
+    price: 100000,
+    duration: "± 45 menit",
+    description: "Sesi bicara terarah untuk stres, kecemasan, dan pemulihan emosi.",
+    createdAt: new Date(),
+  },
+  {
+    id: "srv-6",
+    name: "Audioterapi",
+    price: 90000,
+    duration: "± 30 menit",
+    description: "Terapi frekuensi suara untuk relaksasi dan kualitas tidur.",
+    createdAt: new Date(),
+  },
+];
+
+const mockCmsContent: any[] = [
+  {
+    id: "cms-home",
+    pageKey: "home",
+    title: "Rumah Terapy Ikhtiar Sehat — Klinik TCM Holistik Surabaya",
+    description:
+      "Layanan Pengobatan Tradisional Tiongkok profesional: akupunktur, herbal formula, Tuina, BSM, konseling, dan audioterapi bersama terapis bersertifikat.",
+    heroTitle: "Pendekatan Holistik untuk Keseimbangan Tubuh & Jiwa",
+    heroSubtitle:
+      "Klinik Pengobatan Tradisional Tiongkok (TCM) terpadu di Surabaya. Membantu memulihkan vitalitas secara alami melalui akupunktur, herbal, dan terapi manual.",
+    contentJson: JSON.stringify({
+      stats: [
+        { value: "23", label: "Layanan" },
+        { value: "13", label: "Jumlah Pasien" },
+        { value: "2", label: "Terapis" },
+      ],
+      reasons: [
+        {
+          title: "Terapis Bersertifikat",
+          text: "Tim praktisi kami memiliki sertifikasi resmi dan pengalaman mendalam di bidang Pengobatan Tradisional Tiongkok.",
+        },
+        {
+          title: "Privasi Terjamin 100%",
+          text: "Kami memprioritaskan kerahasiaan dan keamanan data pasien dalam setiap sesi konsultasi.",
+        },
+        {
+          title: "Metode Terbukti",
+          text: "Pendekatan holistik dan personal yang terbukti efektif mengembalikan keseimbangan tubuh dan menangani berbagai keluhan kesehatan.",
+        },
+      ],
+    }),
+    updatedAt: new Date(),
+  },
+  {
+    id: "cms-about",
+    pageKey: "about",
+    title: "Tentang Kami — Rumah Terapy Ikhtiar Sehat",
+    description:
+      "Filosofi, pendekatan, dan perjalanan Rumah Terapy Ikhtiar Sehat sebagai rumah sehat tradisional Chinese medicine.",
+    heroTitle: "Rumah sehat yang merawat dengan sabar",
+    heroSubtitle:
+      "Rumah Terapy Ikhtiar Sehat lahir dari keyakinan sederhana: tubuh punya kemampuan memulihkan diri bila hambatannya dibuka satu per satu.",
+    contentJson: JSON.stringify({
+      philosophyText:
+        "Kami berpegang pada diagnosa sindrom TCM — pengamatan lidah, palpasi nadi, dan wawancara mendalam — lalu menerjemahkannya menjadi rencana terapi yang terukur.",
+      values: [
+        [
+          "Keseimbangan",
+          "Tubuh dipandang sebagai satu sistem. Kami mencari akar, bukan menutup gejala.",
+        ],
+        ["Ketenangan", "Ruang terapi dirancang hening agar tubuh masuk ke mode pemulihan."],
+        ["Kejujuran", "Kami menyampaikan ekspektasi terapi apa adanya, termasuk batasannya."],
+        ["Pendampingan", "Setiap pasien dievaluasi tiap sesi, bukan sekadar diberi resep."],
+      ],
+      timeline: [
+        ["2013", "Praktik pertama akupunktur dan herbal dalam skala rumahan."],
+        ["2017", "Menambahkan Tuina dan konseling sebagai bagian dari protokol terapi."],
+        ["2021", "Mengadopsi pendekatan BSM untuk kasus kronis dan degeneratif."],
+        ["2024", "Membuka layanan audioterapi dan sistem reservasi terjadwal."],
+      ],
+    }),
+    updatedAt: new Date(),
+  },
+];
+
 function extractValuesFromCond(c: any): string[] {
   if (!c) return [];
   if (typeof c === "string" || typeof c === "number") {
@@ -184,6 +300,8 @@ function createMockDb() {
     if (table === schema.profiles) return mockProfiles;
     if (table === schema.sessions) return mockSessions;
     if (table === schema.screeningQuestions) return mockScreeningQuestions;
+    if (table === schema.services) return mockServices;
+    if (table === schema.cmsContent) return mockCmsContent;
     return [];
   };
 
@@ -318,6 +436,8 @@ async function initRealDatabaseTables(pgPool: pg.Pool) {
       address TEXT NOT NULL,
       referral_code TEXT,
       tongue_photo_url TEXT,
+      screening_answers TEXT,
+      screening_completed_at TIMESTAMPTZ,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
@@ -358,8 +478,36 @@ async function initRealDatabaseTables(pgPool: pg.Pool) {
       sort_order INTEGER NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS services (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL UNIQUE,
+      price INTEGER NOT NULL,
+      duration TEXT NOT NULL,
+      description TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS cms_content (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      page_key TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      hero_title TEXT NOT NULL,
+      hero_subtitle TEXT NOT NULL,
+      content_json TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   `;
   await pgPool.query(sql);
+  try {
+    await pgPool.query("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS screening_answers TEXT;");
+    await pgPool.query(
+      "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS screening_completed_at TIMESTAMPTZ;",
+    );
+  } catch (alterErr) {
+    console.warn("[AI Studio] Error altering profiles table:", alterErr);
+  }
 }
 
 export function getDb(): any {

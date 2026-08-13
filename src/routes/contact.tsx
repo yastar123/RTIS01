@@ -1,4 +1,5 @@
 import { createFileRoute } from "@/lib/route";
+import { useState, useEffect } from "react";
 import { Phone, MapPin, Clock, MessageCircle } from "lucide-react";
 
 import { PageHeader } from "@/components/site/PageHeader";
@@ -13,13 +14,13 @@ export const Route = createFileRoute("/contact")({
           "Hubungi Rumah Terapy Ikhtiar Sehat di 0813 6972 9617 untuk konsultasi, jadwal terapi, dan informasi layanan TCM.",
       },
       { property: "og:title", content: "Kontak & Lokasi — Rumah Terapy Ikhtiar Sehat" },
-      { property: "og:description", content: "Hubungi kami untuk konsultasi dan jadwal terapi." },
+      { property: "og:description", content: "Hubungi kami untuk konsultasi and jadwal terapi." },
     ],
   }),
   component: Contact,
 });
 
-const info = [
+const defaultInfo = [
   { icon: Phone, label: "Telepon / WhatsApp", value: "0813 6972 9617" },
   { icon: MapPin, label: "Lokasi", value: "Jl. Sehat Sentosa No. 12, Medan" },
   { icon: Clock, label: "Jam Praktik", value: "Senin – Sabtu, 08.00 – 20.00" },
@@ -30,6 +31,37 @@ const inputClass =
   "mt-2 w-full rounded-sm border border-input bg-card px-4 py-3 text-sm outline-none transition-colors focus:border-primary";
 
 function Contact() {
+  const [whatsapp, setWhatsapp] = useState("6281369729617");
+  const [phoneDisplay, setPhoneDisplay] = useState("0813 6972 9617");
+
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.whatsappNumber) {
+          setWhatsapp(data.whatsappNumber);
+          // format display phone number nicely e.g. 0813 6972 9617
+          let num = data.whatsappNumber;
+          if (num.startsWith("62")) {
+            num = "0" + num.substring(2);
+          }
+          if (num.length >= 11) {
+            setPhoneDisplay(`${num.substring(0, 4)} ${num.substring(4, 8)} ${num.substring(8)}`);
+          } else {
+            setPhoneDisplay(num);
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const info = [
+    { icon: Phone, label: "Telepon / WhatsApp", value: phoneDisplay },
+    { icon: MapPin, label: "Lokasi", value: "Jl. Sehat Sentosa No. 12, Medan" },
+    { icon: Clock, label: "Jam Praktik", value: "Senin – Sabtu, 08.00 – 20.00" },
+    { icon: MessageCircle, label: "Email", value: "halo@ikhtiarsehat.id" },
+  ];
+
   return (
     <>
       <PageHeader
@@ -52,7 +84,7 @@ function Contact() {
             ))}
           </div>
           <a
-            href="https://wa.me/6281369729617"
+            href={`https://wa.me/${whatsapp}`}
             target="_blank"
             rel="noreferrer"
             className="mt-8 inline-flex rounded-full bg-primary px-7 py-3 text-sm text-primary-foreground transition-opacity hover:opacity-90"

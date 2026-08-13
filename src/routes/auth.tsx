@@ -100,7 +100,13 @@ function AuthPage() {
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      navigate({ to: "/dashboard" });
+      const justReg = window.localStorage.getItem("just_registered");
+      if (justReg === "true") {
+        window.localStorage.removeItem("just_registered");
+        navigate({ to: "/skrining" });
+      } else {
+        navigate({ to: "/dashboard" });
+      }
     }
   }, [isAuthenticated, isLoading, navigate]);
 
@@ -223,7 +229,12 @@ function AuthPage() {
       if (!login.ok) throw new Error(result.message ?? "Email atau password salah");
       window.localStorage.setItem("auth_token", result.token);
       await refetchUser();
-      navigate("/dashboard");
+      if (mode === "register") {
+        window.localStorage.setItem("just_registered", "true");
+        navigate("/skrining");
+      } else {
+        navigate("/dashboard");
+      }
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Terjadi kesalahan");
     } finally {
@@ -245,10 +256,15 @@ function AuthPage() {
           </div>
           <div className="relative z-10">
             <div className="flex items-center gap-3">
-              <div className="grid h-12 w-12 place-items-center rounded-xl bg-primary-foreground/20">
-                <span className="text-2xl">🌿</span>
+              <img
+                src="/logo.png"
+                alt="Logo Rumah Terapy"
+                className="h-14 w-auto rounded-xl bg-white p-1"
+              />
+              <div className="leading-tight">
+                <span className="block font-display text-lg font-medium">Rumah Terapy</span>
+                <span className="text-[11px] opacity-75">Ikhtiar Sehat</span>
               </div>
-              <span className="font-display text-xl font-medium">Rumah Terapy Ikhtiar Sehat</span>
             </div>
           </div>
           <div className="relative z-10">
@@ -268,6 +284,9 @@ function AuthPage() {
         {/* Right panel: form */}
         <div className="no-scrollbar flex min-h-screen flex-col justify-start overflow-y-auto p-6 md:max-h-screen md:py-12 md:px-12 lg:px-20">
           <div className="m-auto w-full max-w-xl">
+            <div className="mb-6 flex justify-center md:hidden">
+              <img src="/logo.png" alt="Logo Rumah Terapy" className="h-16 w-auto" />
+            </div>
             <div className="mb-6 text-center md:text-left">
               <h1 className="font-display text-2xl font-medium text-foreground md:text-3xl">
                 {mode === "login" ? "Selamat datang kembali" : "Buat akun baru"}

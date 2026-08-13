@@ -1,4 +1,5 @@
 import { Link, createFileRoute } from "@/lib/route";
+import { useEffect, useState } from "react";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -149,6 +150,59 @@ const articles = [
 ];
 
 function Home() {
+  const [cmsHeroTitle, setCmsHeroTitle] = useState(
+    "Layanan Pengobatan Tradisional Tiongkok profesional",
+  );
+  const [cmsHeroSub, setCmsHeroSub] = useState(
+    "Tingkatkan vitalitas dan kembalikan keseimbangan tubuh Anda bersama praktisi bersertifikat kami melalui pendekatan Pengobatan Tradisional Tiongkok.",
+  );
+  const [statsList, setStatsList] = useState(stats);
+  const [reasonsList, setReasonsList] = useState(reasons);
+  const [therapistsList, setTherapistsList] = useState(therapists);
+  const [featuredList, setFeaturedList] = useState(featured);
+  const [reviewsList, setReviewsList] = useState(reviews);
+  const [articlesList, setArticlesList] = useState(articles);
+  const [whatsapp, setWhatsapp] = useState("6281369729617");
+
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.whatsappNumber) {
+          setWhatsapp(data.whatsappNumber);
+        }
+      })
+      .catch(() => {});
+
+    fetch("/api/cms/home")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.heroTitle) {
+          setCmsHeroTitle(data.heroTitle);
+          setCmsHeroSub(data.heroSubtitle);
+          try {
+            const parsed = JSON.parse(data.contentJson ?? "{}");
+            if (parsed.stats) setStatsList(parsed.stats);
+            if (parsed.reasons) {
+              setReasonsList(
+                parsed.reasons.map((r: { title: string; text: string }, idx: number) => ({
+                  ...r,
+                  icon: reasons[idx]?.icon ?? BadgeCheck,
+                })),
+              );
+            }
+            if (parsed.therapists) setTherapistsList(parsed.therapists);
+            if (parsed.featured) setFeaturedList(parsed.featured);
+            if (parsed.reviews) setReviewsList(parsed.reviews);
+            if (parsed.articles) setArticlesList(parsed.articles);
+          } catch {
+            /* ignore */
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <>
       {/* HERO */}
@@ -157,13 +211,10 @@ function Home() {
         <div className="mt-5 grid items-center gap-8 sm:mt-6 sm:gap-10 md:grid-cols-[1.05fr_1fr] md:gap-12">
           <div className="min-w-0">
             <h1 className="fade-up text-[clamp(2rem,7vw,3.75rem)] leading-[1.1] text-balance">
-              <span className="block text-primary">
-                Layanan Pengobatan Tradisional Tiongkok profesional
-              </span>
+              <span className="block text-primary">{cmsHeroTitle}</span>
             </h1>
             <p className="fade-up mt-5 max-w-lg text-[0.95rem] leading-relaxed text-muted-foreground sm:mt-7 sm:text-base">
-              Tingkatkan vitalitas dan kembalikan keseimbangan tubuh Anda bersama praktisi
-              bersertifikat kami melalui pendekatan Pengobatan Tradisional Tiongkok.
+              {cmsHeroSub}
             </p>
             <div className="fade-up mt-7 flex flex-col items-stretch gap-3 sm:mt-9 sm:flex-row sm:flex-wrap sm:items-center">
               <Link
@@ -172,12 +223,14 @@ function Home() {
               >
                 Reservasi Sekarang!
               </Link>
-              <Link
-                to="/contact"
+              <a
+                href={`https://wa.me/${whatsapp}`}
+                target="_blank"
+                rel="noreferrer"
                 className="inline-flex items-center justify-center gap-1 rounded-full border border-border px-7 py-3 text-sm transition-colors hover:border-primary hover:text-primary"
               >
                 Konsultasi Gratis <ArrowUpRight className="size-4 shrink-0" />
-              </Link>
+              </a>
             </div>
           </div>
 
@@ -194,7 +247,7 @@ function Home() {
         </div>
 
         <div className="mt-10 grid grid-cols-2 gap-6 border-t border-border pt-8 sm:mt-14 sm:gap-8 sm:pt-10 md:grid-cols-4">
-          {stats.map((s) => (
+          {statsList.map((s) => (
             <div key={s.label} className="min-w-0">
               <p className="font-display text-[clamp(1.75rem,6vw,3rem)]">{s.value}</p>
               <p className="eyebrow mt-2">{s.label}</p>
@@ -210,7 +263,7 @@ function Home() {
           Solusi nyata dalam memulihkan dan meningkatkan kesehatan Anda secara menyeluruh
         </h2>
         <div className="mt-12 grid gap-10 md:grid-cols-3">
-          {reasons.map((r) => (
+          {reasonsList.map((r) => (
             <div key={r.title} className="border-t border-border pt-6">
               <r.icon className="size-6 text-primary" />
               <h3 className="mt-5 text-xl">{r.title}</h3>
@@ -236,7 +289,7 @@ function Home() {
               Para ahli bersertifikat yang mendampingi pemulihan Anda
             </h2>
             <div className="mt-8">
-              {therapists.map((t) => (
+              {therapistsList.map((t) => (
                 <div
                   key={t.name}
                   className="flex items-start gap-4 border-b border-border py-5 first:border-t"
@@ -265,7 +318,7 @@ function Home() {
         </p>
 
         <div className="mt-12 grid gap-px bg-border sm:grid-cols-2">
-          {featured.map((f) => (
+          {featuredList.map((f) => (
             <article key={f.title} className="flex flex-col bg-background p-6 sm:p-8">
               <h3 className="text-xl">{f.title}</h3>
               <p className="mt-4 flex-1 text-sm leading-relaxed text-muted-foreground">{f.text}</p>
@@ -294,10 +347,10 @@ function Home() {
 
           <div className="marquee mt-12 -mx-4 px-4 sm:-mx-5 sm:px-5">
             <div className="marquee-track">
-              {[...reviews, ...reviews].map((r, idx) => (
+              {[...reviewsList, ...reviewsList].map((r, idx) => (
                 <figure
                   key={`${r.name}-${idx}`}
-                  aria-hidden={idx >= reviews.length}
+                  aria-hidden={idx >= reviewsList.length}
                   className="w-[80vw] shrink-0 bg-background p-6 sm:w-[22rem] sm:p-7"
                 >
                   <div className="flex items-center gap-2">
@@ -347,7 +400,7 @@ function Home() {
         </div>
 
         <div className="mt-12 border-t border-border">
-          {articles.map((a) => (
+          {articlesList.map((a) => (
             <article
               key={a.title}
               className="grid gap-3 border-b border-border py-7 md:grid-cols-[1.1fr_1.4fr] md:gap-10"

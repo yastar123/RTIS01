@@ -57,9 +57,11 @@ function AdminLoginPage() {
         <div className="hidden bg-primary p-10 text-primary-foreground md:flex md:flex-col md:justify-between lg:p-14">
           <div>
             <div className="mb-10 flex items-center gap-3">
-              <div className="grid h-11 w-11 place-items-center rounded-xl bg-primary-foreground/15">
-                <ShieldCheck className="h-6 w-6" />
-              </div>
+              <img
+                src="/logo.png"
+                alt="Logo Rumah Terapy"
+                className="h-12 w-auto rounded-lg bg-white p-1"
+              />
               <div>
                 <p className="font-display text-xl">Rumah Terapy</p>
                 <p className="text-xs uppercase tracking-[0.2em] text-primary-foreground/70">
@@ -82,6 +84,9 @@ function AdminLoginPage() {
 
         <div className="p-6 sm:p-10 lg:p-14">
           <div className="mx-auto max-w-md">
+            <div className="mb-6 flex justify-center md:hidden">
+              <img src="/logo.png" alt="Logo Rumah Terapy" className="h-16 w-auto" />
+            </div>
             <p className="eyebrow">Administrator</p>
             <h2 className="mt-3 font-display text-3xl text-foreground">Masuk ke dashboard</h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">

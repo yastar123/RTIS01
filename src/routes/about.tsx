@@ -1,4 +1,5 @@
 import { createFileRoute } from "@/lib/route";
+import { useEffect, useState } from "react";
 
 import aboutImg from "@/assets/about-herbs.jpg";
 import { PageHeader } from "@/components/site/PageHeader";
@@ -37,13 +38,35 @@ const timeline = [
 ];
 
 function About() {
+  const [cmsHeroTitle, setCmsHeroTitle] = useState("Rumah sehat yang merawat dengan sabar");
+  const [cmsHeroSub, setCmsHeroSub] = useState(
+    "Rumah Terapy Ikhtiar Sehat lahir dari keyakinan sederhana: tubuh punya kemampuan memulihkan diri bila hambatannya dibuka satu per satu.",
+  );
+  const [valuesList, setValuesList] = useState(values);
+  const [timelineList, setTimelineList] = useState(timeline);
+
+  useEffect(() => {
+    fetch("/api/cms/about")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.heroTitle) {
+          setCmsHeroTitle(data.heroTitle);
+          setCmsHeroSub(data.heroSubtitle);
+          try {
+            const parsed = JSON.parse(data.contentJson ?? "{}");
+            if (parsed.values) setValuesList(parsed.values);
+            if (parsed.timeline) setTimelineList(parsed.timeline);
+          } catch {
+            /* ignore */
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <>
-      <PageHeader
-        eyebrow="Tentang Kami"
-        title="Rumah sehat yang merawat dengan sabar"
-        description="Rumah Terapy Ikhtiar Sehat lahir dari keyakinan sederhana: tubuh punya kemampuan memulihkan diri bila hambatannya dibuka satu per satu."
-      />
+      <PageHeader eyebrow="Tentang Kami" title={cmsHeroTitle} description={cmsHeroSub} />
 
       <section className="mx-auto grid max-w-6xl gap-8 px-4 py-14 sm:px-5 sm:py-20 md:grid-cols-2 md:items-center md:gap-12">
         <img
@@ -73,7 +96,7 @@ function About() {
 
       <section className="mx-auto max-w-6xl px-4 py-10 sm:px-5 sm:py-12">
         <div className="grid gap-8 sm:grid-cols-2 md:grid-cols-4 md:gap-10">
-          {values.map(([title, text]) => (
+          {valuesList.map(([title, text]) => (
             <div key={title}>
               <h3 className="text-lg">{title}</h3>
               <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{text}</p>
@@ -85,7 +108,7 @@ function About() {
       <section className="mx-auto max-w-6xl px-4 py-14 sm:px-5 sm:py-20">
         <p className="eyebrow">Perjalanan</p>
         <div className="mt-8 border-t border-border">
-          {timeline.map(([year, text]) => (
+          {timelineList.map(([year, text]) => (
             <div
               key={year}
               className="grid gap-2 border-b border-border py-6 md:grid-cols-[8rem_1fr]"

@@ -27,11 +27,14 @@ import {
   RefreshCw,
   Save,
   Search,
+  Settings,
   ShieldCheck,
   Stethoscope,
   Trash2,
   User,
   UserCircle,
+  Users,
+  MapPin,
   X,
 } from "lucide-react";
 import { useAuth, useProfile, authHeaders } from "@/hooks/use-auth";
@@ -48,7 +51,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { serviceOptions, formatPrice, saveReservation, type Reservation } from "@/lib/reservations";
+import {
+  serviceOptions,
+  fetchServiceOptions,
+  formatPrice,
+  saveReservation,
+  type Reservation,
+  type ServiceOption,
+} from "@/lib/reservations";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -64,7 +74,8 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
   component: DashboardPage,
 });
 
-type Section = "overview" | "profile" | "reservations" | "screening" | "articles";
+type Section =
+  "overview" | "profile" | "reservations" | "screening" | "articles" | "cms" | "users" | "settings";
 
 export function DashboardPage() {
   const { user, signOut } = useAuth();
@@ -89,10 +100,17 @@ export function DashboardPage() {
   const navItems: { key: Section; label: string; icon: typeof LayoutDashboard }[] = [
     { key: "overview", label: "Ringkasan", icon: LayoutDashboard },
     { key: "profile", label: "Profil Saya", icon: UserCircle },
-    { key: "reservations", label: "Reservasi", icon: CalendarDays },
     { key: "screening", label: "Skrening", icon: Stethoscope },
     { key: "articles", label: "Artikel", icon: BookOpen },
   ];
+
+  if (isAdmin) {
+    // Insert Reservations at index 2 (between Profile and Screening) for Admin
+    navItems.splice(2, 0, { key: "reservations", label: "Reservasi", icon: CalendarDays });
+    navItems.push({ key: "users", label: "Manajemen User", icon: Users });
+    navItems.push({ key: "cms", label: "Kelola CMS", icon: Globe });
+    navItems.push({ key: "settings", label: "Pengaturan WA", icon: Settings });
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-sand">
@@ -126,9 +144,11 @@ export function DashboardPage() {
           </Button>
 
           <div className="flex items-center gap-2">
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground shadow-xs">
-              <Activity className="h-5 w-5" />
-            </div>
+            <img
+              src="/logo.png"
+              alt="Logo Rumah Terapy"
+              className="h-9 w-auto shrink-0 rounded-lg bg-white p-0.5 border"
+            />
             <div>
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <span className="font-display text-base font-semibold text-foreground sm:text-lg">
@@ -283,9 +303,11 @@ export function DashboardPage() {
         >
           <div className="flex items-center justify-between border-b pb-4">
             <div className="flex items-center gap-2.5">
-              <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground">
-                <Activity className="h-4 w-4" />
-              </div>
+              <img
+                src="/logo.png"
+                alt="Logo Rumah Terapy"
+                className="h-8 w-auto bg-white p-0.5 rounded-lg border"
+              />
               <div>
                 <span className="font-display font-semibold text-foreground text-sm">
                   Rumah Terapy
@@ -374,7 +396,13 @@ export function DashboardPage() {
                         ? isAdmin
                           ? "Kelola & Uji Soal Skrening"
                           : "Skrening Kesehatan"
-                        : "Artikel & Edukasi Kesehatan"}
+                        : section === "cms"
+                          ? "Kelola Konten Halaman (CMS)"
+                          : section === "users"
+                            ? "Manajemen Pengguna & Pasien"
+                            : section === "settings"
+                              ? "Pengaturan WhatsApp Klinik"
+                              : "Artikel & Edukasi Kesehatan"}
               </h1>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -394,8 +422,812 @@ export function DashboardPage() {
           {section === "reservations" && <ReservationsTab />}
           {section === "screening" && <ScreeningTab onNavigate={setSection} />}
           {section === "articles" && <ArticlesTab />}
+          {section === "cms" && <CmsTab />}
+          {section === "users" && <UsersTab />}
+          {section === "settings" && <SettingsTab />}
         </main>
       </div>
+    </div>
+  );
+}
+
+function CmsTab() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+
+  const [cmsPageKey, setCmsPageKey] = useState<"home" | "about">("home");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [heroTitle, setHeroTitle] = useState("");
+  const [heroSubtitle, setHeroSubtitle] = useState("");
+
+  // Fallbacks
+  const homeFallback = {
+    stats: [
+      { value: "23", label: "Layanan" },
+      { value: "13", label: "Jumlah Pasien" },
+      { value: "2", label: "Terapis" },
+    ],
+    reasons: [
+      {
+        title: "Terapis Bersertifikat",
+        text: "Tim praktisi kami memiliki sertifikasi resmi dan pengalaman mendalam di bidang Pengobatan Tradisional Tiongkok.",
+      },
+      {
+        title: "Privasi Terjamin 100%",
+        text: "Kami memprioritaskan kerahasiaan dan keamanan data pasien dalam setiap sesi konsultasi.",
+      },
+      {
+        title: "Metode Terbukti",
+        text: "Pendekatan holistik dan personal yang terbukti efektif mengembalikan keseimbangan tubuh dan menangani berbagai keluhan kesehatan.",
+      },
+    ],
+    therapists: [
+      { name: "Imroatus Solikhah, Amd.Akp", role: "Akupunturis" },
+      {
+        name: "Master Jun, S.Ud, B.Med, M.T (Biomed)",
+        role: "TCM (Traditional Chinese Medicine)",
+      },
+    ],
+    featured: [
+      {
+        title: "Formula Herbal",
+        text: "Formula herbal personalisasi — kami memahami setiap tubuh itu unik, sehingga racikan disusun sesuai konstitusi dan akar masalah Anda.",
+      },
+      {
+        title: "BSM & Tuina Lengkap",
+        text: "Perpaduan Body Space Medicine berbasis energi dengan terapi manual Tuina untuk penyembuhan yang menyeluruh.",
+      },
+      {
+        title: "Tuina Chuzhen Kepala",
+        text: "Terapi pijat khas TCM pada area kepala untuk relaksasi mendalam, meredakan pusing, dan memperbaiki kualitas tidur.",
+      },
+      {
+        title: "Akupunktur Face Lift 500 Jarum",
+        text: "Transformasi alami tanpa operasi. Rangsangan maksimal untuk menyegarkan dan mengencangkan wajah dari dalam.",
+      },
+    ],
+    reviews: [
+      {
+        quote:
+          "Alhamdulillah dengan adanya TCM memberikan informasi yang akurat dan terstruktur, dan perawatan disesuaikan secara tepat dengan kondisi tubuh.",
+        name: "Efendi Mohammad",
+      },
+      {
+        quote:
+          "Setelah diterapi akupunktur fullbody, badan langsung terasa enak dan ringan dibandingkan sebelumnya. Terima kasih.",
+        name: "Triono Nugroho",
+      },
+      {
+        quote: "Sangat puas dengan pelayanannya. Dan insyaAllah akan melanjutkan terapi.",
+        name: "Tatik Rustin Rahayu Ningsih",
+      },
+    ],
+    articles: [
+      {
+        title: "Mengenal Akupunktur: Mengembalikan Keseimbangan Energi Tubuh",
+        text: "Akupunktur telah digunakan argumen ribuan tahun untuk mengatasi berbagai masalah kesehatan dengan menyeimbangkan aliran energi tubuh (Qi).",
+      },
+      {
+        title: "Pentingnya Menjaga Kesehatan Holistik di Era Modern",
+        text: "Kesehatan sejati bukan sekadar bebas dari penyakit, melainkan harmoni antara pikiran, tubuh, dan jiwa.",
+      },
+    ],
+  };
+
+  const aboutFallback = {
+    philosophyText:
+      "Kami berpegang pada diagnosa sindrom TCM — pengamatan lidah, palpasi nadi, dan wawancara mendalam — lalu menerjemahkannya menjadi rencana terapi yang terukur. Setiap racikan herbal ditakar ulang mengikuti perkembangan pasien.",
+    values: [
+      [
+        "Keseimbangan",
+        "Tubuh dipandang sebagai satu sistem. Kami mencari akar, bukan menutup gejala.",
+      ],
+      ["Ketenangan", "Ruang terapi dirancang hening agar tubuh masuk ke mode pemulihan."],
+      ["Kejujuran", "Kami menyampaikan ekspektasi terapi apa adanya, termasuk batasannya."],
+      ["Pendampingan", "Setiap pasien dievaluasi tiap sesi, bukan sekadar diberi resep."],
+    ] as [string, string][],
+    timeline: [
+      ["2013", "Praktik pertama akupunktur dan herbal dalam skala rumahan."],
+      ["2017", "Menambahkan Tuina dan konseling sebagai bagian dari protokol terapi."],
+      ["2021", "Mengadopsi pendekatan BSM untuk kasus kronis dan degeneratif."],
+      ["2024", "Membuka layanan audioterapi dan sistem reservasi terjadwal."],
+    ] as [string, string][],
+  };
+
+  // Home arrays state
+  const [stats, setStats] = useState<{ value: string; label: string }[]>([]);
+  const [reasons, setReasons] = useState<{ title: string; text: string }[]>([]);
+  const [therapists, setTherapists] = useState<{ name: string; role: string }[]>([]);
+  const [featured, setFeatured] = useState<{ title: string; text: string }[]>([]);
+  const [reviews, setReviews] = useState<{ quote: string; name: string }[]>([]);
+  const [articles, setArticles] = useState<{ title: string; text: string }[]>([]);
+
+  // About arrays state
+  const [philosophyText, setPhilosophyText] = useState("");
+  const [values, setValues] = useState<[string, string][]>([]);
+  const [timeline, setTimeline] = useState<[string, string][]>([]);
+
+  const [isLoadingCms, setIsLoadingCms] = useState(false);
+  const [isSavingCms, setIsSavingCms] = useState(false);
+  const [cmsMessage, setCmsMessage] = useState("");
+
+  const loadCms = async (key: "home" | "about") => {
+    setIsLoadingCms(true);
+    setCmsMessage("");
+    try {
+      const res = await fetch(`/api/cms/${key}`);
+      if (res.ok) {
+        const data = await res.json();
+        setTitle(data.title ?? "");
+        setDescription(data.description ?? "");
+        setHeroTitle(data.heroTitle ?? "");
+        setHeroSubtitle(data.heroSubtitle ?? "");
+
+        const parsed = JSON.parse(data.contentJson ?? "{}");
+        if (key === "home") {
+          setStats(parsed.stats || homeFallback.stats);
+          setReasons(parsed.reasons || homeFallback.reasons);
+          setTherapists(parsed.therapists || homeFallback.therapists);
+          setFeatured(parsed.featured || homeFallback.featured);
+          setReviews(parsed.reviews || homeFallback.reviews);
+          setArticles(parsed.articles || homeFallback.articles);
+        } else {
+          setPhilosophyText(parsed.philosophyText || aboutFallback.philosophyText);
+          setValues(parsed.values || aboutFallback.values);
+          setTimeline(parsed.timeline || aboutFallback.timeline);
+        }
+      }
+    } catch {
+      setCmsMessage("Gagal memuat data CMS.");
+    } finally {
+      setIsLoadingCms(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAdmin) {
+      void loadCms(cmsPageKey);
+    }
+  }, [isAdmin, cmsPageKey]);
+
+  const handleSaveCms = async (e: FormEvent) => {
+    e.preventDefault();
+    setIsSavingCms(true);
+    setCmsMessage("");
+
+    let contentObj = {};
+    if (cmsPageKey === "home") {
+      contentObj = { stats, reasons, therapists, featured, reviews, articles };
+    } else {
+      contentObj = { philosophyText, values, timeline };
+    }
+
+    try {
+      const res = await fetch(`/api/admin/cms/${cmsPageKey}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(),
+        },
+        body: JSON.stringify({
+          title,
+          description,
+          heroTitle,
+          heroSubtitle,
+          contentJson: JSON.stringify(contentObj),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? "Gagal menyimpan CMS.");
+      setCmsMessage("Berhasil menyimpan perubahan halaman CMS secara live!");
+    } catch (err) {
+      setCmsMessage(err instanceof Error ? err.message : "Terjadi kesalahan.");
+    } finally {
+      setIsSavingCms(false);
+    }
+  };
+
+  if (!isAdmin) {
+    return (
+      <Card className="p-6">
+        <p className="text-sm text-destructive">
+          Anda tidak memiliki izin untuk mengakses halaman ini.
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card className="border-primary/10 shadow-xs">
+        <CardHeader className="pb-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <CardTitle className="font-display text-xl">Kelola Konten Halaman (CMS)</CardTitle>
+              <CardDescription className="text-xs sm:text-sm">
+                Ubah judul, deskripsi, hero, dan seluruh data yang ter-hardcode secara instan dan
+                live.
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={cmsPageKey === "home" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setCmsPageKey("home")}
+                className="text-xs"
+              >
+                Halaman Home
+              </Button>
+              <Button
+                variant={cmsPageKey === "about" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setCmsPageKey("about")}
+                className="text-xs"
+              >
+                Halaman About
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-6">
+          {cmsMessage && (
+            <div
+              className={`p-3 rounded-lg text-xs sm:text-sm ${
+                cmsMessage.includes("Berhasil")
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                  : "bg-destructive/10 text-destructive"
+              }`}
+            >
+              {cmsMessage}
+            </div>
+          )}
+
+          {isLoadingCms ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : (
+            <form onSubmit={handleSaveCms} className="space-y-6">
+              <div className="flex items-center justify-between border-b pb-3">
+                <h4 className="font-semibold text-base capitalize text-primary">
+                  Pengaturan Halaman: {cmsPageKey}
+                </h4>
+                <Badge variant="secondary" className="text-xs">
+                  Visual CRUD Builder
+                </Badge>
+              </div>
+
+              {/* SECTION 1: METADATA & HERO */}
+              <div className="space-y-4 rounded-lg bg-sand-soft p-4 border border-primary/5">
+                <h5 className="font-semibold text-sm text-primary">
+                  1. Informasi Utama &amp; Hero
+                </h5>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cms-title">Meta Title / Judul Browser</Label>
+                    <Input
+                      id="cms-title"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cms-desc">Meta Description / Deskripsi SEO</Label>
+                    <Input
+                      id="cms-desc"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="cms-herotitle">Judul Utama (Hero Title)</Label>
+                  <Input
+                    id="cms-herotitle"
+                    value={heroTitle}
+                    onChange={(e) => setHeroTitle(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="cms-herosub">Subjudul / Deskripsi Hero</Label>
+                  <Textarea
+                    id="cms-herosub"
+                    rows={2}
+                    value={heroSubtitle}
+                    onChange={(e) => setHeroSubtitle(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* SECTION 2: DYNAMIC LISTS (CRUD) */}
+              {cmsPageKey === "home" ? (
+                <div className="space-y-6">
+                  {/* HOME STATS */}
+                  <div className="space-y-3 rounded-lg bg-sand-soft p-4 border border-primary/5">
+                    <div className="flex items-center justify-between">
+                      <h5 className="font-semibold text-sm text-primary">2. Statistik Klinik</h5>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setStats([...stats, { value: "0", label: "Label" }])}
+                        className="text-xs gap-1 h-8"
+                      >
+                        <Plus className="h-3 w-3" /> Tambah Stat
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      {stats.map((s, idx) => (
+                        <div key={idx} className="flex gap-2 items-center">
+                          <Input
+                            value={s.value}
+                            onChange={(e) => {
+                              const updated = [...stats];
+                              updated[idx].value = e.target.value;
+                              setStats(updated);
+                            }}
+                            placeholder="Value"
+                            className="w-24 text-center font-semibold"
+                          />
+                          <Input
+                            value={s.label}
+                            onChange={(e) => {
+                              const updated = [...stats];
+                              updated[idx].label = e.target.value;
+                              setStats(updated);
+                            }}
+                            placeholder="Label"
+                            className="flex-1"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setStats(stats.filter((_, i) => i !== idx))}
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* WHY CHOOSE US (REASONS) */}
+                  <div className="space-y-3 rounded-lg bg-sand-soft p-4 border border-primary/5">
+                    <div className="flex items-center justify-between">
+                      <h5 className="font-semibold text-sm text-primary">3. Alasan Memilih Kami</h5>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setReasons([
+                            ...reasons,
+                            { title: "Alasan Baru", text: "Keterangan alasan..." },
+                          ])
+                        }
+                        className="text-xs gap-1 h-8"
+                      >
+                        <Plus className="h-3 w-3" /> Tambah Alasan
+                      </Button>
+                    </div>
+                    <div className="space-y-3">
+                      {reasons.map((r, idx) => (
+                        <div key={idx} className="p-3 bg-background rounded-md border space-y-2">
+                          <div className="flex gap-2 items-center justify-between">
+                            <Input
+                              value={r.title}
+                              onChange={(e) => {
+                                const updated = [...reasons];
+                                updated[idx].title = e.target.value;
+                                setReasons(updated);
+                              }}
+                              placeholder="Judul Alasan"
+                              className="font-medium flex-1"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setReasons(reasons.filter((_, i) => i !== idx))}
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <Textarea
+                            value={r.text}
+                            onChange={(e) => {
+                              const updated = [...reasons];
+                              updated[idx].text = e.target.value;
+                              setReasons(updated);
+                            }}
+                            placeholder="Deskripsi penjelasan alasan..."
+                            rows={2}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* THERAPISTS */}
+                  <div className="space-y-3 rounded-lg bg-sand-soft p-4 border border-primary/5">
+                    <div className="flex items-center justify-between">
+                      <h5 className="font-semibold text-sm text-primary">4. Profil Terapis</h5>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setTherapists([
+                            ...therapists,
+                            { name: "Nama Terapis", role: "Spesialisasi" },
+                          ])
+                        }
+                        className="text-xs gap-1 h-8"
+                      >
+                        <Plus className="h-3 w-3" /> Tambah Terapis
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      {therapists.map((t, idx) => (
+                        <div
+                          key={idx}
+                          className="flex gap-2 items-center bg-background p-2 rounded-md border"
+                        >
+                          <Input
+                            value={t.name}
+                            onChange={(e) => {
+                              const updated = [...therapists];
+                              updated[idx].name = e.target.value;
+                              setTherapists(updated);
+                            }}
+                            placeholder="Nama Terapis"
+                            className="flex-1 font-medium"
+                          />
+                          <Input
+                            value={t.role}
+                            onChange={(e) => {
+                              const updated = [...therapists];
+                              updated[idx].role = e.target.value;
+                              setTherapists(updated);
+                            }}
+                            placeholder="Peran / Spesialisasi"
+                            className="flex-1"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setTherapists(therapists.filter((_, i) => i !== idx))}
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* FEATURED SERVICES */}
+                  <div className="space-y-3 rounded-lg bg-sand-soft p-4 border border-primary/5">
+                    <div className="flex items-center justify-between">
+                      <h5 className="font-semibold text-sm text-primary">5. Layanan Unggulan</h5>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setFeatured([
+                            ...featured,
+                            { title: "Layanan Baru", text: "Penjelasan layanan..." },
+                          ])
+                        }
+                        className="text-xs gap-1 h-8"
+                      >
+                        <Plus className="h-3 w-3" /> Tambah Layanan
+                      </Button>
+                    </div>
+                    <div className="space-y-3">
+                      {featured.map((f, idx) => (
+                        <div key={idx} className="p-3 bg-background rounded-md border space-y-2">
+                          <div className="flex gap-2 items-center justify-between">
+                            <Input
+                              value={f.title}
+                              onChange={(e) => {
+                                const updated = [...featured];
+                                updated[idx].title = e.target.value;
+                                setFeatured(updated);
+                              }}
+                              placeholder="Nama Layanan"
+                              className="font-medium flex-1"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setFeatured(featured.filter((_, i) => i !== idx))}
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <Textarea
+                            value={f.text}
+                            onChange={(e) => {
+                              const updated = [...featured];
+                              updated[idx].text = e.target.value;
+                              setFeatured(updated);
+                            }}
+                            placeholder="Deskripsi detail layanan..."
+                            rows={2}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* REVIEWS */}
+                  <div className="space-y-3 rounded-lg bg-sand-soft p-4 border border-primary/5">
+                    <div className="flex items-center justify-between">
+                      <h5 className="font-semibold text-sm text-primary">6. Rating &amp; Ulasan</h5>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setReviews([...reviews, { quote: "Ulasan baru...", name: "Nama Klien" }])
+                        }
+                        className="text-xs gap-1 h-8"
+                      >
+                        <Plus className="h-3 w-3" /> Tambah Ulasan
+                      </Button>
+                    </div>
+                    <div className="space-y-3">
+                      {reviews.map((r, idx) => (
+                        <div key={idx} className="p-3 bg-background rounded-md border space-y-2">
+                          <Textarea
+                            value={r.quote}
+                            onChange={(e) => {
+                              const updated = [...reviews];
+                              updated[idx].quote = e.target.value;
+                              setReviews(updated);
+                            }}
+                            placeholder="Isi Ulasan / Testimoni"
+                            rows={2}
+                          />
+                          <div className="flex gap-2 items-center justify-between">
+                            <Input
+                              value={r.name}
+                              onChange={(e) => {
+                                const updated = [...reviews];
+                                updated[idx].name = e.target.value;
+                                setReviews(updated);
+                              }}
+                              placeholder="Nama Pemberi Ulasan"
+                              className="max-w-[250px]"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setReviews(reviews.filter((_, i) => i !== idx))}
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* ARTICLES */}
+                  <div className="space-y-3 rounded-lg bg-sand-soft p-4 border border-primary/5">
+                    <div className="flex items-center justify-between">
+                      <h5 className="font-semibold text-sm text-primary">7. Artikel Terkini</h5>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setArticles([
+                            ...articles,
+                            { title: "Judul Artikel", text: "Ringkasan artikel..." },
+                          ])
+                        }
+                        className="text-xs gap-1 h-8"
+                      >
+                        <Plus className="h-3 w-3" /> Tambah Artikel
+                      </Button>
+                    </div>
+                    <div className="space-y-3">
+                      {articles.map((a, idx) => (
+                        <div key={idx} className="p-3 bg-background rounded-md border space-y-2">
+                          <div className="flex gap-2 items-center justify-between">
+                            <Input
+                              value={a.title}
+                              onChange={(e) => {
+                                const updated = [...articles];
+                                updated[idx].title = e.target.value;
+                                setArticles(updated);
+                              }}
+                              placeholder="Judul Artikel"
+                              className="font-medium flex-1"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setArticles(articles.filter((_, i) => i !== idx))}
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <Textarea
+                            value={a.text}
+                            onChange={(e) => {
+                              const updated = [...articles];
+                              updated[idx].text = e.target.value;
+                              setArticles(updated);
+                            }}
+                            placeholder="Ringkasan atau teks kutipan artikel..."
+                            rows={2}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* ABOUT PHILOSOPHY */}
+                  <div className="space-y-3 rounded-lg bg-sand-soft p-4 border border-primary/5">
+                    <h5 className="font-semibold text-sm text-primary">2. Teks Filosofi Utama</h5>
+                    <Textarea
+                      value={philosophyText}
+                      onChange={(e) => setPhilosophyText(e.target.value)}
+                      placeholder="Tuliskan filosofi klinik kami secara holistik di sini..."
+                      rows={4}
+                      required
+                    />
+                  </div>
+
+                  {/* ABOUT VALUES */}
+                  <div className="space-y-3 rounded-lg bg-sand-soft p-4 border border-primary/5">
+                    <div className="flex items-center justify-between">
+                      <h5 className="font-semibold text-sm text-primary">3. Nilai-Nilai Utama</h5>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setValues([...values, ["Nilai Baru", "Penjelasan nilai..."]])
+                        }
+                        className="text-xs gap-1 h-8"
+                      >
+                        <Plus className="h-3 w-3" /> Tambah Nilai
+                      </Button>
+                    </div>
+                    <div className="space-y-3">
+                      {values.map(([valTitle, valText], idx) => (
+                        <div key={idx} className="p-3 bg-background rounded-md border space-y-2">
+                          <div className="flex gap-2 items-center justify-between">
+                            <Input
+                              value={valTitle}
+                              onChange={(e) => {
+                                const updated = [...values];
+                                updated[idx] = [e.target.value, valText];
+                                setValues(updated);
+                              }}
+                              placeholder="Nama Nilai (e.g. Kejujuran)"
+                              className="font-medium flex-1"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setValues(values.filter((_, i) => i !== idx))}
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <Textarea
+                            value={valText}
+                            onChange={(e) => {
+                              const updated = [...values];
+                              updated[idx] = [valTitle, e.target.value];
+                              setValues(updated);
+                            }}
+                            placeholder="Deskripsi nilai..."
+                            rows={2}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* ABOUT TIMELINE */}
+                  <div className="space-y-3 rounded-lg bg-sand-soft p-4 border border-primary/5">
+                    <div className="flex items-center justify-between">
+                      <h5 className="font-semibold text-sm text-primary">
+                        4. Perjalanan &amp; Linimasa
+                      </h5>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setTimeline([...timeline, ["Tahun", "Peristiwa..."]])}
+                        className="text-xs gap-1 h-8"
+                      >
+                        <Plus className="h-3 w-3" /> Tambah Linimasa
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      {timeline.map(([timeYear, timeText], idx) => (
+                        <div
+                          key={idx}
+                          className="flex gap-2 items-start bg-background p-2 rounded-md border"
+                        >
+                          <Input
+                            value={timeYear}
+                            onChange={(e) => {
+                              const updated = [...timeline];
+                              updated[idx] = [e.target.value, timeText];
+                              setTimeline(updated);
+                            }}
+                            placeholder="Tahun"
+                            className="w-24 text-center font-bold"
+                          />
+                          <Textarea
+                            value={timeText}
+                            onChange={(e) => {
+                              const updated = [...timeline];
+                              updated[idx] = [timeYear, e.target.value];
+                              setTimeline(updated);
+                            }}
+                            placeholder="Peristiwa penting"
+                            rows={1}
+                            className="flex-1"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setTimeline(timeline.filter((_, i) => i !== idx))}
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10 mt-1"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-4 border-t">
+                <Button type="submit" disabled={isSavingCms} className="gap-1.5 px-6">
+                  <Save className="h-4 w-4" />
+                  {isSavingCms ? "Menyimpan..." : "Simpan Perubahan Live CMS"}
+                </Button>
+              </div>
+            </form>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -902,9 +1734,106 @@ function ReservationsTab() {
   const isAdmin = user?.role === "admin";
   const { data: profile } = useProfile();
 
-  const [activeSubTab, setActiveSubTab] = useState<"list" | "new" | "check">(
+  const [activeSubTab, setActiveSubTab] = useState<"list" | "services" | "new" | "check">(
     isAdmin ? "list" : "new",
   );
+
+  const [serviceOptionsList, setServiceOptionsList] = useState<ServiceOption[]>(serviceOptions);
+  const [isLoadingServices, setIsLoadingServices] = useState(false);
+
+  const loadServices = async () => {
+    setIsLoadingServices(true);
+    try {
+      const data = await fetchServiceOptions();
+      setServiceOptionsList(data);
+      if (data.length > 0 && !form.service) {
+        setForm((prev) => ({ ...prev, service: data[0].name }));
+      }
+    } catch {
+      // fallback
+    } finally {
+      setIsLoadingServices(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadServices();
+  }, []);
+
+  // Admin Service CRUD State
+  const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
+  const [editingService, setEditingService] = useState<ServiceOption | null>(null);
+  const [serviceForm, setServiceForm] = useState({
+    name: "",
+    price: 150000,
+    duration: "± 60 menit",
+    description: "",
+  });
+  const [serviceFormError, setServiceFormError] = useState("");
+  const [isSavingService, setIsSavingService] = useState(false);
+
+  const openAddServiceModal = () => {
+    setEditingService(null);
+    setServiceForm({ name: "", price: 150000, duration: "± 60 menit", description: "" });
+    setServiceFormError("");
+    setIsServiceModalOpen(true);
+  };
+
+  const openEditServiceModal = (srv: ServiceOption) => {
+    setEditingService(srv);
+    setServiceForm({
+      name: srv.name,
+      price: srv.price,
+      duration: srv.duration,
+      description: srv.description,
+    });
+    setServiceFormError("");
+    setIsServiceModalOpen(true);
+  };
+
+  const handleSaveServiceSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setIsSavingService(true);
+    setServiceFormError("");
+    try {
+      const url = editingService?.id
+        ? `/api/admin/services/${editingService.id}`
+        : "/api/admin/services";
+      const method = editingService?.id ? "PATCH" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(),
+        },
+        body: JSON.stringify(serviceForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? "Gagal menyimpan layanan.");
+      setIsServiceModalOpen(false);
+      await loadServices();
+    } catch (err) {
+      setServiceFormError(err instanceof Error ? err.message : "Terjadi kesalahan.");
+    } finally {
+      setIsSavingService(false);
+    }
+  };
+
+  const handleDeleteService = async (id?: string, name?: string) => {
+    if (!id) return;
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus layanan "${name}"?`)) return;
+    try {
+      const res = await fetch(`/api/admin/services/${id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? "Gagal menghapus layanan.");
+      await loadServices();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Gagal menghapus layanan.");
+    }
+  };
 
   const [form, setForm] = useState({
     name: profile?.full_name ?? profile?.fullName ?? "",
@@ -1097,15 +2026,28 @@ function ReservationsTab() {
               Daftar Reservasi Pasien ({adminReservations.length})
             </Button>
           )}
-          <Button
-            variant={activeSubTab === "new" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setActiveSubTab("new")}
-            className="text-xs sm:text-sm gap-1.5"
-          >
-            <Plus className="h-4 w-4" />
-            Buat Reservasi Baru
-          </Button>
+          {isAdmin && (
+            <Button
+              variant={activeSubTab === "services" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setActiveSubTab("services")}
+              className="text-xs sm:text-sm gap-1.5"
+            >
+              <Stethoscope className="h-4 w-4" />
+              Kelola Layanan ({serviceOptionsList.length})
+            </Button>
+          )}
+          {!isAdmin && (
+            <Button
+              variant={activeSubTab === "new" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setActiveSubTab("new")}
+              className="text-xs sm:text-sm gap-1.5"
+            >
+              <Plus className="h-4 w-4" />
+              Buat Reservasi Baru
+            </Button>
+          )}
           <Button
             variant={activeSubTab === "check" ? "default" : "outline"}
             size="sm"
@@ -1130,6 +2072,153 @@ function ReservationsTab() {
           </Button>
         )}
       </div>
+
+      {/* SUB-TAB: KELOLA LAYANAN (ADMIN) */}
+      {isAdmin && activeSubTab === "services" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-display text-lg font-semibold">Kelola Layanan Terapi</h3>
+              <p className="text-xs text-muted-foreground">
+                Tambah, edit, atau hapus layanan yang tersedia untuk reservasi pasien.
+              </p>
+            </div>
+            <Button size="sm" onClick={openAddServiceModal} className="gap-1.5 text-xs sm:text-sm">
+              <Plus className="h-4 w-4" /> Tambah Layanan
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {serviceOptionsList.map((srv) => (
+              <Card
+                key={srv.id ?? srv.name}
+                className="bg-card shadow-xs flex flex-col justify-between"
+              >
+                <CardContent className="p-4 sm:p-5 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h4 className="font-display font-semibold text-base sm:text-lg text-foreground">
+                        {srv.name}
+                      </h4>
+                      <p className="text-sm font-bold text-primary mt-0.5">
+                        {formatPrice(srv.price)}
+                      </p>
+                    </div>
+                    <Badge variant="secondary" className="text-xs shrink-0">
+                      {srv.duration}
+                    </Badge>
+                  </div>
+                  <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                    {srv.description}
+                  </p>
+                </CardContent>
+                <div className="border-t px-4 py-3 bg-muted/20 flex items-center justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openEditServiceModal(srv)}
+                    className="text-xs gap-1"
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void handleDeleteService(srv.id, srv.name)}
+                    className="text-xs text-destructive hover:bg-destructive/10 gap-1"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Hapus
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          {/* Service Add/Edit Modal with hidden scrollbar */}
+          <Dialog open={isServiceModalOpen} onOpenChange={setIsServiceModalOpen}>
+            <DialogContent className="max-h-[90vh] overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="font-display text-lg">
+                  {editingService ? "Edit Layanan Terapi" : "Tambah Layanan Terapi Baru"}
+                </DialogTitle>
+                <DialogDescription className="text-xs sm:text-sm">
+                  Lengkapi informasi layanan, harga, durasi, dan deskripsi singkat.
+                </DialogDescription>
+              </DialogHeader>
+
+              {serviceFormError && (
+                <div className="rounded-lg bg-destructive/10 p-3 text-xs sm:text-sm text-destructive">
+                  {serviceFormError}
+                </div>
+              )}
+
+              <form onSubmit={handleSaveServiceSubmit} className="space-y-4 pt-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="srv-name">Nama Layanan</Label>
+                  <Input
+                    id="srv-name"
+                    value={serviceForm.name}
+                    onChange={(e) => setServiceForm({ ...serviceForm, name: e.target.value })}
+                    placeholder="Contoh: Akupunktur"
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="srv-price">Harga (Rp)</Label>
+                    <Input
+                      id="srv-price"
+                      type="number"
+                      value={serviceForm.price}
+                      onChange={(e) =>
+                        setServiceForm({ ...serviceForm, price: Number(e.target.value) })
+                      }
+                      placeholder="150000"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="srv-duration">Estimasi Durasi</Label>
+                    <Input
+                      id="srv-duration"
+                      value={serviceForm.duration}
+                      onChange={(e) => setServiceForm({ ...serviceForm, duration: e.target.value })}
+                      placeholder="± 60 menit"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="srv-desc">Deskripsi Layanan</Label>
+                  <Textarea
+                    id="srv-desc"
+                    rows={3}
+                    value={serviceForm.description}
+                    onChange={(e) =>
+                      setServiceForm({ ...serviceForm, description: e.target.value })
+                    }
+                    placeholder="Penusukan titik meridian untuk meredakan nyeri..."
+                    required
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-3 border-t">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsServiceModalOpen(false)}
+                  >
+                    Batal
+                  </Button>
+                  <Button type="submit" disabled={isSavingService}>
+                    {isSavingService ? "Menyimpan..." : "Simpan Layanan"}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      )}
 
       {/* SUB-TAB 1: ADMIN RESERVATIONS LIST */}
       {isAdmin && activeSubTab === "list" && (
@@ -1434,8 +2523,8 @@ function ReservationsTab() {
                       onChange={(e) => setForm({ ...form, service: e.target.value })}
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs sm:text-sm"
                     >
-                      {serviceOptions.map((opt) => (
-                        <option key={opt.name} value={opt.name}>
+                      {serviceOptionsList.map((opt) => (
+                        <option key={opt.id ?? opt.name} value={opt.name}>
                           {opt.name} ({formatPrice(opt.price)} — {opt.duration})
                         </option>
                       ))}
@@ -1452,19 +2541,14 @@ function ReservationsTab() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="res-time">Jam Sesi</Label>
-                    <select
+                    <Label htmlFor="res-time">Jam Sesi (Kustom)</Label>
+                    <Input
                       id="res-time"
+                      placeholder="Contoh: 09:30, 14:00, atau Sore"
                       value={form.time}
                       onChange={(e) => setForm({ ...form, time: e.target.value })}
-                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs sm:text-sm"
-                    >
-                      <option value="09:00">09:00 WIB</option>
-                      <option value="11:00">11:00 WIB</option>
-                      <option value="13:30">13:30 WIB</option>
-                      <option value="15:30">15:30 WIB</option>
-                      <option value="19:00">19:00 WIB</option>
-                    </select>
+                      required
+                    />
                   </div>
                   <div className="space-y-1.5 sm:col-span-2">
                     <Label htmlFor="res-note">Keluhan Utama / Catatan (Opsional)</Label>
@@ -1583,6 +2667,10 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
     (screeningCurrentPage - 1) * 10,
     screeningCurrentPage * 10,
   );
+
+  // Patient answers
+  const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [isSubmitted, setIsSubmitted] = useState(false);
 
   const fetchQuestions = async () => {
     setIsLoading(true);
@@ -1942,39 +3030,54 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
               </p>
             </Card>
           ) : (
-            questions.map((q, idx) => (
-              <Card key={q.id} className="bg-card shadow-xs">
-                <CardContent className="p-3.5 sm:p-5">
-                  <p className="text-xs sm:text-sm font-medium text-foreground leading-relaxed">
-                    {idx + 1}. {q.questionText}
-                  </p>
-                  <div className="mt-3 grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
-                    {[
-                      ["Tidak pernah", 0],
-                      ["Kadang", 1],
-                      ["Sering", 2],
-                      ["Selalu", 3],
-                    ].map(([label, val]) => {
-                      const active = answers[q.id] === val;
-                      return (
-                        <button
-                          key={label as string}
-                          type="button"
-                          onClick={() => setAnswers((prev) => ({ ...prev, [q.id]: val as number }))}
-                          className={`rounded-full px-3 py-1.5 text-center text-xs transition-colors ${
-                            active
-                              ? "bg-primary text-primary-foreground shadow-xs font-medium"
-                              : "border border-border text-muted-foreground hover:border-primary hover:text-primary"
-                          }`}
-                        >
-                          {label as string}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+            <div className="space-y-4">
+              {paginatedQuestions.map((q, idx) => {
+                const globalIdx = (screeningCurrentPage - 1) * 10 + idx;
+                return (
+                  <Card key={q.id} className="bg-card shadow-xs">
+                    <CardContent className="p-3.5 sm:p-5">
+                      <p className="text-xs sm:text-sm font-medium text-foreground leading-relaxed">
+                        {globalIdx + 1}. {q.questionText}
+                      </p>
+                      <div className="mt-3 grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
+                        {[
+                          ["Tidak pernah", 0],
+                          ["Kadang", 1],
+                          ["Sering", 2],
+                          ["Selalu", 3],
+                        ].map(([label, val]) => {
+                          const active = answers[q.id] === val;
+                          return (
+                            <button
+                              key={label as string}
+                              type="button"
+                              onClick={() =>
+                                setAnswers((prev) => ({ ...prev, [q.id]: val as number }))
+                              }
+                              className={`rounded-full px-3 py-1.5 text-center text-xs transition-colors ${
+                                active
+                                  ? "bg-primary text-primary-foreground shadow-xs font-medium"
+                                  : "border border-border text-muted-foreground hover:border-primary hover:text-primary"
+                              }`}
+                            >
+                              {label as string}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+
+              <PaginationControls
+                currentPage={screeningCurrentPage}
+                totalPages={totalScreeningPages}
+                totalItems={questions.length}
+                itemsPerPage={10}
+                onPageChange={setScreeningCurrentPage}
+              />
+            </div>
           )}
 
           {questions.length > 0 && (
@@ -2030,10 +3133,19 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
 {
   /* Tab 5: Articles Component */
 }
-const sampleArticles = [
+interface ArticleItem {
+  id: string;
+  category: string;
+  title: string;
+  excerpt: string;
+  content: string;
+  publishedAt?: string;
+}
+
+const defaultArticles: ArticleItem[] = [
   {
     id: "a1",
-    cat: "Akupunktur",
+    category: "Akupunktur",
     title: "Apa yang terjadi saat jarum akupunktur merangsang titik meridian?",
     excerpt:
       "Penjelasan ilmiah sederhana tentang titik meridian, merangsang sistem saraf lokal, dan memicu pelepasan endorfin.",
@@ -2042,7 +3154,7 @@ const sampleArticles = [
   },
   {
     id: "a2",
-    cat: "Herbal Formula",
+    category: "Herbal Formula",
     title: "Mengapa racikan herbal TCM selalu disesuaikan dengan sindrom pribadi?",
     excerpt:
       "Prinsip individualisasi herbal berdasarkan pola Yin-Yang dan kondisi organ tubuh pasien.",
@@ -2051,7 +3163,7 @@ const sampleArticles = [
   },
   {
     id: "a3",
-    cat: "Gaya Hidup",
+    category: "Gaya Hidup",
     title: "Ritme harian jam organ tubuh dan dampaknya pada istirahat",
     excerpt: "Bagaimana menyesuaikan jadwal makan dan tidur sesuai dengan jam puncak kerja organ.",
     content:
@@ -2060,62 +3172,246 @@ const sampleArticles = [
 ];
 
 function ArticlesTab() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+
+  const [articlesList, setArticlesList] = useState<ArticleItem[]>(defaultArticles);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-  const [selectedArticle, setSelectedArticle] = useState<(typeof sampleArticles)[0] | null>(null);
+  const [selectedArticle, setSelectedArticle] = useState<ArticleItem | null>(null);
   const [articleCurrentPage, setArticleCurrentPage] = useState(1);
 
-  const filtered = sampleArticles.filter(
+  // Admin CRUD states
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingArticle, setEditingArticle] = useState<ArticleItem | null>(null);
+  const [formCategory, setFormCategory] = useState("Akupunktur");
+  const [formTitle, setFormTitle] = useState("");
+  const [formExcerpt, setFormExcerpt] = useState("");
+  const [formContent, setFormContent] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const fetchArticles = async () => {
+    setIsLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/articles");
+      if (!res.ok) throw new Error("Gagal memuat artikel.");
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        setArticlesList(
+          data.map(
+            (item: {
+              id: string;
+              category: string;
+              title: string;
+              excerpt: string;
+              content: string;
+              publishedAt: string;
+            }) => ({
+              id: item.id,
+              category: item.category,
+              title: item.title,
+              excerpt: item.excerpt,
+              content: item.content,
+              publishedAt: item.publishedAt,
+            }),
+          ),
+        );
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal memuat artikel.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchArticles();
+  }, []);
+
+  const handleOpenAdd = () => {
+    setEditingArticle(null);
+    setFormCategory("Akupunktur");
+    setFormTitle("");
+    setFormExcerpt("");
+    setFormContent("");
+    setIsFormOpen(true);
+  };
+
+  const handleOpenEdit = (art: ArticleItem) => {
+    setEditingArticle(art);
+    setFormCategory(art.category);
+    setFormTitle(art.title);
+    setFormExcerpt(art.excerpt);
+    setFormContent(art.content);
+    setIsFormOpen(true);
+  };
+
+  const handleSaveArticle = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!formTitle.trim() || !formExcerpt.trim() || !formContent.trim()) {
+      alert("Semua field wajib diisi.");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const url = editingArticle
+        ? `/api/admin/articles/${editingArticle.id}`
+        : "/api/admin/articles";
+      const method = editingArticle ? "PATCH" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(),
+        },
+        body: JSON.stringify({
+          category: formCategory.trim(),
+          title: formTitle.trim(),
+          excerpt: formExcerpt.trim(),
+          content: formContent.trim(),
+          readTime: "5 menit",
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || "Gagal menyimpan artikel.");
+      }
+
+      setIsFormOpen(false);
+      await fetchArticles();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Gagal menyimpan artikel.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteArticle = async (id: string, title: string) => {
+    if (!confirm(`Hapus artikel "${title}"?`)) return;
+    try {
+      const res = await fetch(`/api/admin/articles/${id}`, {
+        method: "DELETE",
+        headers: { ...authHeaders() },
+      });
+      if (!res.ok) throw new Error("Gagal menghapus artikel.");
+      await fetchArticles();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Gagal menghapus artikel.");
+    }
+  };
+
+  const filtered = articlesList.filter(
     (art) =>
       art.title.toLowerCase().includes(search.toLowerCase()) ||
-      art.cat.toLowerCase().includes(search.toLowerCase()),
+      art.category.toLowerCase().includes(search.toLowerCase()) ||
+      art.excerpt.toLowerCase().includes(search.toLowerCase()),
   );
 
   const totalArticlePages = Math.ceil(filtered.length / 10) || 1;
-  const paginatedArticles = filtered.slice(
-    (articleCurrentPage - 1) * 10,
-    articleCurrentPage * 10,
-  );
+  const paginatedArticles = filtered.slice((articleCurrentPage - 1) * 10, articleCurrentPage * 10);
 
   return (
     <div className="space-y-6">
-      <div className="flex w-full max-w-md items-center gap-2">
-        <Search className="h-4 w-4 text-muted-foreground shrink-0" />
-        <Input
-          placeholder="Cari artikel kesehatan..."
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setArticleCurrentPage(1);
-          }}
-          className="w-full"
-        />
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex w-full max-w-md items-center gap-2">
+          <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+          <Input
+            placeholder="Cari artikel kesehatan..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setArticleCurrentPage(1);
+            }}
+            className="w-full"
+          />
+        </div>
+
+        {isAdmin && (
+          <Button onClick={handleOpenAdd} className="gap-2 shrink-0">
+            <Plus className="h-4 w-4" />
+            <span>Tambah Artikel Baru</span>
+          </Button>
+        )}
       </div>
 
-      <div className="grid gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {paginatedArticles.map((art) => (
-          <Card key={art.id} className="bg-card shadow-xs transition-all hover:shadow-md">
-            <CardHeader className="pb-2">
-              <Badge variant="secondary" className="w-fit text-[11px]">
-                {art.cat}
-              </Badge>
-              <CardTitle className="font-display text-base font-semibold leading-snug">
-                {art.title}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-xs text-muted-foreground line-clamp-3">{art.excerpt}</p>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="p-0 text-xs font-medium text-primary hover:bg-transparent hover:underline"
-                onClick={() => setSelectedArticle(art)}
-              >
-                Baca Selengkapnya →
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {error && (
+        <div className="rounded-lg bg-destructive/10 p-3 text-xs sm:text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <Card className="p-8 text-center bg-card shadow-xs">
+          <p className="text-sm text-muted-foreground">Tidak ada artikel yang ditemukan.</p>
+        </Card>
+      ) : (
+        <div className="grid gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {paginatedArticles.map((art) => (
+            <Card
+              key={art.id}
+              className="bg-card shadow-xs transition-all hover:shadow-md flex flex-col justify-between"
+            >
+              <div>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <Badge variant="secondary" className="w-fit text-[11px]">
+                      {art.category}
+                    </Badge>
+                  </div>
+                  <CardTitle className="font-display text-base font-semibold leading-snug mt-1">
+                    {art.title}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 pb-3">
+                  <p className="text-xs text-muted-foreground line-clamp-3">{art.excerpt}</p>
+                </CardContent>
+              </div>
+
+              <div className="px-6 pb-6 pt-0 flex items-center justify-between border-t border-border/40 mt-auto pt-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="p-0 text-xs font-medium text-primary hover:bg-transparent hover:underline"
+                  onClick={() => setSelectedArticle(art)}
+                >
+                  Baca Selengkapnya →
+                </Button>
+
+                {isAdmin && (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() => handleOpenEdit(art)}
+                      title="Edit Artikel"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive hover:text-destructive/80"
+                      onClick={() => handleDeleteArticle(art.id, art.title)}
+                      title="Hapus Artikel"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <PaginationControls
         currentPage={articleCurrentPage}
@@ -2125,23 +3421,893 @@ function ArticlesTab() {
         onPageChange={setArticleCurrentPage}
       />
 
+      {/* View Article Modal */}
       {selectedArticle && (
         <Dialog open={!!selectedArticle} onOpenChange={() => setSelectedArticle(null)}>
-          <DialogContent className="w-[92vw] max-w-lg">
+          <DialogContent className="w-[92vw] max-w-lg max-h-[85vh] overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             <DialogHeader>
-              <Badge variant="secondary" className="w-fit mb-1">
-                {selectedArticle.cat}
-              </Badge>
+              <div className="flex items-center justify-between mb-1">
+                <Badge variant="secondary" className="w-fit">
+                  {selectedArticle.category}
+                </Badge>
+              </div>
               <DialogTitle className="font-display text-lg sm:text-xl">
                 {selectedArticle.title}
               </DialogTitle>
             </DialogHeader>
-            <DialogDescription className="text-xs sm:text-sm leading-relaxed text-foreground/90 pt-2">
+            <DialogDescription className="text-xs sm:text-sm leading-relaxed text-foreground/90 pt-3 whitespace-pre-wrap">
               {selectedArticle.content}
             </DialogDescription>
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Admin Add/Edit Article Modal */}
+      {isFormOpen && (
+        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+          <DialogContent className="w-[92vw] max-w-lg max-h-[90vh] overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            <DialogHeader>
+              <DialogTitle className="font-display text-lg sm:text-xl">
+                {editingArticle ? "Edit Artikel Kesehatan" : "Tambah Artikel Kesehatan Baru"}
+              </DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
+                Isi detail informasi artikel edukasi kesehatan untuk pasien.
+              </DialogDescription>
+            </DialogHeader>
+
+            <form onSubmit={handleSaveArticle} className="space-y-4 pt-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="art-category">Kategori</Label>
+                <Input
+                  id="art-category"
+                  value={formCategory}
+                  onChange={(e) => setFormCategory(e.target.value)}
+                  placeholder="Mis. Akupunktur, Herbal Formula, Gaya Hidup"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="art-title">Judul Artikel</Label>
+                <Input
+                  id="art-title"
+                  value={formTitle}
+                  onChange={(e) => setFormTitle(e.target.value)}
+                  placeholder="Judul menarik..."
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="art-excerpt">Ringkasan Singkat (Excerpt)</Label>
+                <Textarea
+                  id="art-excerpt"
+                  value={formExcerpt}
+                  onChange={(e) => setFormExcerpt(e.target.value)}
+                  placeholder="Ringkasan singkat yang muncul di kartu artikel..."
+                  rows={2}
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="art-content">Isi Artikel Lengkap</Label>
+                <Textarea
+                  id="art-content"
+                  value={formContent}
+                  onChange={(e) => setFormContent(e.target.value)}
+                  placeholder="Tulis isi artikel lengkap di sini..."
+                  rows={6}
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsFormOpen(false)}
+                  disabled={isSubmitting}
+                >
+                  Batal
+                </Button>
+                <Button type="submit" disabled={isSubmitting} className="gap-1.5">
+                  {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                  <span>{editingArticle ? "Simpan Perubahan" : "Terbitkan Artikel"}</span>
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
+  );
+}
+
+interface RegisteredUser {
+  id: string;
+  email: string;
+  role: string;
+  fullName: string | null;
+  gender: string | null;
+  age: number | null;
+  height: number | null;
+  weight: number | null;
+  phone: string | null;
+  address: string | null;
+  referralCode: string | null;
+  tonguePhotoUrl: string | null;
+  createdAt: string;
+}
+
+function UsersTab() {
+  const [users, setUsers] = useState<RegisteredUser[]>([]);
+  const [query, setQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [whatsappSettings, setWhatsappSettings] = useState<{
+    whatsappNumber: string;
+    whatsappMessageTemplate: string;
+  } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((res) => res.json())
+      .then((data) => setWhatsappSettings(data))
+      .catch((err) => console.error("Error fetching settings:", err));
+  }, []);
+
+  const getWhatsAppUserUrl = (u: RegisteredUser) => {
+    if (!whatsappSettings) return "";
+    let template =
+      whatsappSettings.whatsappMessageTemplate ||
+      "Halo [nama],\n\nBerikut adalah hasil skrining TCM Anda. Silakan klik link berikut untuk melihat detail analisis holistik Anda:\n\n[link]\n\nTerima kasih,\nRumah Terapy Ikhtiar Sehat";
+    const reportUrl = `${window.location.origin}/skrining?userId=${u.id}`;
+
+    template = template.replace("[nama]", u.fullName || "Pasien");
+    template = template.replace("[link]", reportUrl);
+
+    const phoneNum = u.phone || "";
+    let cleaned = phoneNum.replace(/[^0-9]/g, "");
+    if (cleaned.startsWith("0")) {
+      cleaned = "62" + cleaned.substring(1);
+    } else if (cleaned.startsWith("8")) {
+      cleaned = "62" + cleaned;
+    }
+
+    return `https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(template)}`;
+  };
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<RegisteredUser | null>(null);
+
+  const [form, setForm] = useState({
+    email: "",
+    password: "",
+    fullName: "",
+    gender: "Laki-laki",
+    age: "",
+    height: "",
+    weight: "",
+    phone: "",
+    address: "",
+    role: "user",
+  });
+  const [isSaving, setIsSaving] = useState(false);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  const loadUsers = async () => {
+    setIsLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/api/admin/users", {
+        headers: {
+          ...authHeaders(),
+        },
+      });
+      if (!response.ok) {
+        throw new Error("Gagal mengambil data pengguna.");
+      }
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonErr) {
+        throw new Error("Format respons tidak valid (kemungkinan server sedang memuat ulang).");
+      }
+      setUsers(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Terjadi kesalahan memuat data.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadUsers();
+  }, []);
+
+  const handleOpenCreate = () => {
+    setSelectedUser(null);
+    setForm({
+      email: "",
+      password: "",
+      fullName: "",
+      gender: "Laki-laki",
+      age: "",
+      height: "",
+      weight: "",
+      phone: "",
+      address: "",
+      role: "user",
+    });
+    setSaveError("");
+    setDialogOpen(true);
+  };
+
+  const handleOpenEdit = (user: RegisteredUser) => {
+    setSelectedUser(user);
+    setForm({
+      email: user.email,
+      password: "",
+      fullName: user.fullName || "",
+      gender: user.gender || "Laki-laki",
+      age: user.age ? String(user.age) : "",
+      height: user.height ? String(user.height) : "",
+      weight: user.weight ? String(user.weight) : "",
+      phone: user.phone || "",
+      address: user.address || "",
+      role: user.role || "user",
+    });
+    setSaveError("");
+    setDialogOpen(true);
+  };
+
+  const handleDelete = async (user: RegisteredUser) => {
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(`Hapus akun user "${user.fullName || user.email}"?`)
+    ) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, {
+        method: "DELETE",
+        headers: {
+          ...authHeaders(),
+        },
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || "Gagal menghapus pengguna.");
+      }
+      await loadUsers();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Gagal menghapus.");
+    }
+  };
+
+  const handleGPS = () => {
+    setGpsLoading(true);
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude.toFixed(6);
+          const lon = position.coords.longitude.toFixed(6);
+          setForm((f) => ({
+            ...f,
+            address: `GPS (${lat}, ${lon}) - Surabaya, Jawa Timur`,
+          }));
+          setGpsLoading(false);
+        },
+        () => {
+          setForm((f) => ({
+            ...f,
+            address: "Surabaya, Jawa Timur (Lokasi GPS simulasi)",
+          }));
+          setGpsLoading(false);
+        },
+      );
+    } else {
+      setForm((f) => ({
+        ...f,
+        address: "Lokasi tidak didukung peramban ini.",
+      }));
+      setGpsLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    setSaveError("");
+
+    try {
+      if (!selectedUser && (!form.password || form.password.length < 8)) {
+        throw new Error("Password wajib diisi minimal 8 karakter.");
+      }
+
+      const url = selectedUser ? `/api/admin/users/${selectedUser.id}` : "/api/admin/users";
+      const method = selectedUser ? "PATCH" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(),
+        },
+        body: JSON.stringify({
+          ...form,
+          age: form.age ? Number(form.age) : null,
+          height: form.height ? Number(form.height) : null,
+          weight: form.weight ? Number(form.weight) : null,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || "Gagal menyimpan.");
+      }
+
+      setDialogOpen(false);
+      await loadUsers();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Terjadi kesalahan.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const filteredUsers = users.filter((u) =>
+    [u.email, u.fullName ?? "", u.phone ?? "", u.address ?? "", u.role]
+      .join(" ")
+      .toLowerCase()
+      .includes(query.toLowerCase()),
+  );
+
+  return (
+    <Card className="border-emerald-100 bg-white">
+      <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b pb-4">
+        <div>
+          <CardTitle className="text-emerald-950 font-display text-lg">
+            Kelola Akun Pengguna
+          </CardTitle>
+          <CardDescription>{users.length} akun terdaftar di sistem Rumah Terapy</CardDescription>
+        </div>
+        <Button
+          onClick={handleOpenCreate}
+          className="w-full sm:w-auto gap-1.5 bg-primary hover:bg-primary/95"
+        >
+          <Plus className="h-4 w-4" /> Tambah user baru
+        </Button>
+      </CardHeader>
+
+      <CardContent className="pt-4 space-y-4">
+        <div className="relative">
+          <Search className="absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Cari berdasarkan nama, email, nomor HP, peran..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+
+        {isLoading ? (
+          <div className="flex h-32 items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          </div>
+        ) : error ? (
+          <div className="p-4 text-center text-sm text-destructive font-medium border rounded-lg bg-destructive/5">
+            {error}
+          </div>
+        ) : (
+          <>
+            {/* Desktop View */}
+            <div className="hidden lg:block overflow-x-auto border rounded-xl">
+              <table className="w-full text-sm text-left text-muted-foreground border-collapse">
+                <thead className="bg-emerald-50/50 text-emerald-900 font-medium border-b text-xs uppercase tracking-wider">
+                  <tr>
+                    <th className="px-4 py-3">Nama & Email</th>
+                    <th className="px-4 py-3">No. HP / WhatsApp</th>
+                    <th className="px-4 py-3">Jenis Kelamin</th>
+                    <th className="px-4 py-3">Usia / Fisik</th>
+                    <th className="px-4 py-3">Alamat Domisili</th>
+                    <th className="px-4 py-3">Peran</th>
+                    <th className="px-4 py-3 text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-emerald-50/60">
+                  {filteredUsers.map((u) => (
+                    <tr key={u.id} className="hover:bg-emerald-50/20 transition-colors">
+                      <td className="px-4 py-3">
+                        <div>
+                          <p className="font-semibold text-emerald-950">{u.fullName || "—"}</p>
+                          <p className="text-xs text-muted-foreground">{u.email}</p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs">{u.phone || "—"}</td>
+                      <td className="px-4 py-3">{u.gender || "—"}</td>
+                      <td className="px-4 py-3 text-xs">
+                        {u.age ? `${u.age} Tahun` : "—"}
+                        {u.height || u.weight ? (
+                          <div className="text-muted-foreground mt-0.5">
+                            {u.height ? `${u.height} cm` : "—"} ·{" "}
+                            {u.weight ? `${u.weight} kg` : "—"}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td
+                        className="px-4 py-3 max-w-[180px] truncate text-xs"
+                        title={u.address || ""}
+                      >
+                        {u.address || "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge
+                          variant={u.role === "admin" ? "default" : "secondary"}
+                          className="text-[10px]"
+                        >
+                          {u.role === "admin" ? "Admin" : "User"}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end gap-1.5">
+                          {u.phone && (
+                            <a
+                              href={getWhatsAppUserUrl(u)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-md text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
+                              title="Kirim Hasil Skrining via WhatsApp"
+                            >
+                              <Phone className="h-4 w-4" />
+                            </a>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleOpenEdit(u)}
+                            aria-label="Edit"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDelete(u)}
+                            aria-label="Hapus"
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredUsers.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="h-28 text-center text-muted-foreground">
+                        Belum ada user terdaftar.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile View */}
+            <div className="grid gap-3 lg:hidden">
+              {filteredUsers.map((u) => (
+                <div
+                  key={u.id}
+                  className="rounded-lg border p-4 space-y-3 bg-white shadow-xs hover:border-primary/40 transition-all text-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-emerald-950 text-base">
+                      {u.fullName || "—"}
+                    </span>
+                    <Badge
+                      variant={u.role === "admin" ? "default" : "secondary"}
+                      className="text-[10px]"
+                    >
+                      {u.role === "admin" ? "Admin" : "User"}
+                    </Badge>
+                  </div>
+
+                  <div className="space-y-1.5 text-xs text-muted-foreground">
+                    <p>
+                      <strong className="text-emerald-950">Email:</strong> {u.email}
+                    </p>
+                    <p>
+                      <strong className="text-emerald-950">No. HP:</strong> {u.phone || "—"}
+                    </p>
+                    <p>
+                      <strong className="text-emerald-950">Detail Fisik:</strong> {u.gender || "—"}{" "}
+                      · {u.age ? `${u.age} Tahun` : "—"} · {u.height ? `${u.height} cm` : "—"} /{" "}
+                      {u.weight ? `${u.weight} kg` : "—"}
+                    </p>
+                    <p className="line-clamp-2">
+                      <strong className="text-emerald-950">Alamat:</strong> {u.address || "—"}
+                    </p>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2 border-t">
+                    {u.phone && (
+                      <a
+                        href={getWhatsAppUserUrl(u)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex h-8 items-center gap-1 px-3 text-xs font-semibold rounded-md border border-emerald-200 text-emerald-700 hover:bg-emerald-50 bg-emerald-50/20 transition-colors"
+                      >
+                        <Phone className="h-3.5 w-3.5" />
+                        <span>Kirim WA</span>
+                      </a>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleOpenEdit(u)}
+                      className="h-8 text-xs gap-1"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      <span>Edit</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDelete(u)}
+                      className="h-8 text-xs text-destructive hover:bg-destructive/10 gap-1"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>Hapus</span>
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              {filteredUsers.length === 0 && (
+                <div className="text-center py-8 text-xs text-muted-foreground border border-dashed rounded-lg">
+                  Belum ada user terdaftar.
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </CardContent>
+
+      {/* Add / Edit Dialog */}
+      {dialogOpen && (
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{selectedUser ? "Edit Akun User" : "Tambah Akun User Baru"}</DialogTitle>
+              <DialogDescription>
+                Isi formulir profil pengguna secara lengkap di bawah ini.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Nama Lengkap *</Label>
+                  <Input
+                    required
+                    placeholder="Nama lengkap Anda"
+                    value={form.fullName}
+                    onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Jenis Kelamin *</Label>
+                  <select
+                    required
+                    value={form.gender}
+                    onChange={(e) => setForm({ ...form, gender: e.target.value })}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <option value="Laki-laki">Laki-laki</option>
+                    <option value="Perempuan">Perempuan</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Usia *</Label>
+                  <div className="relative">
+                    <Input
+                      required
+                      type="number"
+                      placeholder="Tahun"
+                      value={form.age}
+                      onChange={(e) => setForm({ ...form, age: e.target.value })}
+                      className="pr-12"
+                    />
+                    <span className="absolute right-3 top-2.5 text-xs text-muted-foreground">
+                      Tahun
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label>Tinggi Badan *</Label>
+                    <div className="relative">
+                      <Input
+                        required
+                        type="number"
+                        placeholder="cm"
+                        value={form.height}
+                        onChange={(e) => setForm({ ...form, height: e.target.value })}
+                        className="pr-8"
+                      />
+                      <span className="absolute right-2 top-2.5 text-xs text-muted-foreground">
+                        cm
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>Berat Badan *</Label>
+                    <div className="relative">
+                      <Input
+                        required
+                        type="number"
+                        placeholder="kg"
+                        value={form.weight}
+                        onChange={(e) => setForm({ ...form, weight: e.target.value })}
+                        className="pr-8"
+                      />
+                      <span className="absolute right-2 top-2.5 text-xs text-muted-foreground">
+                        kg
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Email</Label>
+                  <Input
+                    required
+                    type="email"
+                    placeholder="nama@email.com"
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>{selectedUser ? "Password (Isi jika ingin ganti)" : "Password *"}</Label>
+                  <Input
+                    required={!selectedUser}
+                    type="password"
+                    placeholder="Minimal 8 karakter"
+                    value={form.password}
+                    onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  />
+                </div>
+
+                <div className="sm:col-span-2 space-y-1.5">
+                  <Label>No. HP / WhatsApp *</Label>
+                  <Input
+                    required
+                    placeholder="0812xxxxxxxx"
+                    value={form.phone}
+                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    * Hasil skrining akan dikirimkan ke WhatsApp ini. Pastikan nomor aktif.
+                  </p>
+                </div>
+
+                <div className="sm:col-span-2 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Alamat Domisili *</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGPS}
+                      disabled={gpsLoading}
+                      className="h-8 text-xs gap-1"
+                    >
+                      <MapPin className="h-3.5 w-3.5 text-primary" />
+                      <span>{gpsLoading ? "Mencari..." : "Gunakan GPS"}</span>
+                    </Button>
+                  </div>
+                  <Textarea
+                    required
+                    placeholder="Masukkan alamat domisili lengkap Anda"
+                    value={form.address}
+                    onChange={(e) => setForm({ ...form, address: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Role Akses</Label>
+                  <select
+                    value={form.role}
+                    onChange={(e) => setForm({ ...form, role: e.target.value })}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-hidden"
+                  >
+                    <option value="user">User / Pasien</option>
+                    <option value="admin">Administrator</option>
+                  </select>
+                </div>
+              </div>
+
+              {saveError && <p className="text-sm text-destructive font-medium">{saveError}</p>}
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                  Batal
+                </Button>
+                <Button type="submit" disabled={isSaving}>
+                  {isSaving ? "Menyimpan..." : "Simpan Akun"}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
+    </Card>
+  );
+}
+
+function SettingsTab() {
+  const [whatsappNumber, setWhatsappNumber] = useState("");
+  const [whatsappMessageTemplate, setWhatsappMessageTemplate] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const loadSettings = async () => {
+    setIsLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/settings");
+      if (!res.ok) throw new Error("Gagal memuat pengaturan.");
+      let data;
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        throw new Error("Format respons tidak valid (kemungkinan server sedang memuat ulang).");
+      }
+      setWhatsappNumber(data.whatsappNumber || "6281369729617");
+      setWhatsappMessageTemplate(
+        data.whatsappMessageTemplate ||
+          "Halo [nama],\n\nBerikut adalah hasil skrining TCM Anda. Silakan klik link berikut untuk melihat detail analisis holistik Anda:\n\n[link]\n\nTerima kasih,\nRumah Terapy Ikhtiar Sehat",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Terjadi kesalahan.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadSettings();
+  }, []);
+
+  const handleSave = async (e: FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    setMessage("");
+    setError("");
+
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(),
+        },
+        body: JSON.stringify({ whatsappNumber, whatsappMessageTemplate }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "Gagal menyimpan pengaturan.");
+      }
+
+      setWhatsappNumber(data.whatsappNumber);
+      setWhatsappMessageTemplate(data.whatsappMessageTemplate);
+      setMessage("Pengaturan WhatsApp berhasil diperbarui!");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal menyimpan.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <Card className="border-emerald-100 bg-white">
+      <CardHeader className="border-b pb-4">
+        <CardTitle className="text-emerald-950 font-display text-lg">
+          Pengaturan WhatsApp Utama & Broadcast
+        </CardTitle>
+        <CardDescription>
+          Atur nomor telepon klinik dan sesuaikan draf pesan otomatis yang akan dikirimkan berisi
+          link hasil skrining TCM ke WhatsApp pasien.
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent className="pt-6">
+        {isLoading ? (
+          <div className="flex h-32 items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          </div>
+        ) : (
+          <form onSubmit={handleSave} className="max-w-2xl space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="wa-num">Nomor WhatsApp Klinik *</Label>
+              <div className="relative">
+                <Input
+                  id="wa-num"
+                  required
+                  placeholder="Contoh: 6281369729617 atau 081369729617"
+                  value={whatsappNumber}
+                  onChange={(e) => setWhatsappNumber(e.target.value)}
+                  className="pl-3 max-w-md"
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Format nomor internasional otomatis diubah (contoh: nomor dimulai dengan 0 atau 8
+                otomatis dikonversi ke kode negara 62).
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="wa-template">Pesan Broadcast Hasil Skrining *</Label>
+              <textarea
+                id="wa-template"
+                required
+                rows={6}
+                placeholder="Masukkan draf pesan broadcast hasil skrining..."
+                value={whatsappMessageTemplate}
+                onChange={(e) => setWhatsappMessageTemplate(e.target.value)}
+                className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              />
+              <div className="rounded-md bg-emerald-50/50 p-3 border border-emerald-100/60 text-xs text-emerald-900 space-y-1">
+                <p className="font-semibold">Placeholder Dinamis yang Didukung:</p>
+                <ul className="list-disc list-inside space-y-0.5 ml-1">
+                  <li>
+                    <code className="bg-emerald-100/80 px-1 py-0.5 rounded text-emerald-950 font-mono font-bold">
+                      [nama]
+                    </code>{" "}
+                    - Diganti dengan nama lengkap pasien
+                  </li>
+                  <li>
+                    <code className="bg-emerald-100/80 px-1 py-0.5 rounded text-emerald-950 font-mono font-bold">
+                      [link]
+                    </code>{" "}
+                    - Diganti dengan link laporan skrining pasien
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            {error && (
+              <div className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive font-medium">
+                {error}
+              </div>
+            )}
+
+            {message && (
+              <div className="rounded-lg bg-emerald-50 p-3 text-xs text-emerald-800 font-medium border border-emerald-100">
+                {message}
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              disabled={isSaving}
+              className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {isSaving ? "Menyimpan..." : "Simpan Pengaturan"}
+            </Button>
+          </form>
+        )}
+      </CardContent>
+    </Card>
   );
 }

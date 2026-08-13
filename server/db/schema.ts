@@ -23,6 +23,8 @@ export const profiles = pgTable("profiles", {
   address: text("address").notNull(),
   referralCode: text("referral_code"),
   tonguePhotoUrl: text("tongue_photo_url"),
+  screeningAnswers: text("screening_answers"),
+  screeningCompletedAt: timestamp("screening_completed_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -64,4 +66,24 @@ export const screeningQuestions = pgTable("screening_questions", {
   questionText: text("question_text").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const services = pgTable("services", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull().unique(),
+  price: integer("price").notNull(),
+  duration: text("duration").notNull(),
+  description: text("description").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const cmsContent = pgTable("cms_content", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  pageKey: text("page_key").notNull().unique(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  heroTitle: text("hero_title").notNull(),
+  heroSubtitle: text("hero_subtitle").notNull(),
+  contentJson: text("content_json").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

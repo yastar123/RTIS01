@@ -13,6 +13,7 @@ export type Reservation = {
 const KEY = "ris-reservations";
 
 export type ServiceOption = {
+  id?: string;
   name: string;
   price: number;
   duration: string;
@@ -57,6 +58,20 @@ export const serviceOptions: ServiceOption[] = [
     description: "Terapi frekuensi suara untuk relaksasi dan kualitas tidur.",
   },
 ];
+
+export async function fetchServiceOptions(): Promise<ServiceOption[]> {
+  try {
+    const res = await fetch("/api/services");
+    if (!res.ok) return serviceOptions;
+    const data = await res.json();
+    if (Array.isArray(data) && data.length > 0) {
+      return data;
+    }
+  } catch {
+    // fallback
+  }
+  return serviceOptions;
+}
 
 export const services = serviceOptions.map((s) => s.name);
 
