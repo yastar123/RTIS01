@@ -145,7 +145,7 @@ export function DashboardPage() {
 
           <div className="flex items-center gap-2">
             <img
-              src="/logo.png"
+              src="/logon.png"
               alt="Logo Rumah Terapy"
               className="h-9 w-auto shrink-0 rounded-lg bg-white p-0.5 border"
             />
@@ -304,7 +304,7 @@ export function DashboardPage() {
           <div className="flex items-center justify-between border-b pb-4">
             <div className="flex items-center gap-2.5">
               <img
-                src="/logo.png"
+                src="/logon.png"
                 alt="Logo Rumah Terapy"
                 className="h-8 w-auto bg-white p-0.5 rounded-lg border"
               />

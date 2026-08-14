@@ -630,7 +630,7 @@ function Skrining() {
         <div className="mx-auto flex max-w-7xl h-16 items-center justify-between px-4 sm:px-6">
           <Link to="/" className="flex items-center gap-2.5">
             <img
-              src="/logo.png"
+              src="/logon.png"
               alt="Logo Rumah Terapy"
               className="h-10 w-auto rounded-lg bg-white p-0.5 border border-neutral-200"
             />
@@ -1059,7 +1059,7 @@ function Skrining() {
             <div className="flex flex-col items-center justify-between border-b pb-8 sm:flex-row gap-6">
               <div className="flex items-center gap-4">
                 <img
-                  src="/logo.png"
+                  src="/logon.png"
                   alt="Logo Rumah Terapy"
                   className="h-20 w-auto rounded-xl border p-1"
                 />

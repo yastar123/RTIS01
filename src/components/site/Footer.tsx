@@ -7,7 +7,7 @@ export function Footer() {
     <footer className="mt-28 border-t border-border bg-secondary/50">
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-12 sm:px-5 sm:py-16 md:grid-cols-3">
         <div>
-          <img src="/logo.png" alt="Rumah Terapy Ikhtiar Sehat" className="h-16 w-auto" />
+          <img src="/logon.png" alt="Rumah Terapy Ikhtiar Sehat" className="h-16 w-auto" />
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
             Rumah sehat tradisional Chinese medicine. Perawatan holistik yang tenang, personal, dan
             berlandaskan keseimbangan tubuh.

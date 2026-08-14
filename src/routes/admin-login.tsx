@@ -58,7 +58,7 @@ function AdminLoginPage() {
           <div>
             <div className="mb-10 flex items-center gap-3">
               <img
-                src="/logo.png"
+                src="/logon.png"
                 alt="Logo Rumah Terapy"
                 className="h-12 w-auto rounded-lg bg-white p-1"
               />
@@ -85,7 +85,7 @@ function AdminLoginPage() {
         <div className="p-6 sm:p-10 lg:p-14">
           <div className="mx-auto max-w-md">
             <div className="mb-6 flex justify-center md:hidden">
-              <img src="/logo.png" alt="Logo Rumah Terapy" className="h-16 w-auto" />
+              <img src="/logon.png" alt="Logo Rumah Terapy" className="h-16 w-auto" />
             </div>
             <p className="eyebrow">Administrator</p>
             <h2 className="mt-3 font-display text-3xl text-foreground">Masuk ke dashboard</h2>

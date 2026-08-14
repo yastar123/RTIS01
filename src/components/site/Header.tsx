@@ -24,7 +24,7 @@ export function Header() {
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-5 md:h-20">
         <Link to="/" className="flex min-w-0 items-center gap-3" onClick={() => setOpen(false)}>
           <img
-            src="/logo.png"
+            src="/logon.png"
             alt="Logo Rumah Terapy Ikhtiar Sehat"
             className="h-9 w-auto shrink-0 md:h-11"
           />
