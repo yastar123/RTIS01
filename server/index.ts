@@ -1247,7 +1247,7 @@ async function start() {
   } else {
     const distPath = path.join(process.cwd(), "dist", "client");
     app.use(express.static(distPath));
-    app.get("*", (_req, res) => res.sendFile(path.join(distPath, "index.html")));
+    app.get("/*splat", (_req, res) => res.sendFile(path.join(distPath, "index.html")));
   }
   const port = Number(process.env.PORT ?? 3000);
   app.listen(port, "0.0.0.0", () => console.log(`Express server berjalan di port ${port}`));
