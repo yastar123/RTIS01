@@ -101,6 +101,7 @@ const mockUsers: any[] = [
 const mockProfiles: any[] = [];
 const mockSessions: any[] = [];
 const mockReservations: any[] = [];
+const mockScreeningResults: any[] = [];
 const mockScreeningQuestions: any[] = [
   {
     id: "sq-1",
@@ -300,6 +301,7 @@ function createMockDb() {
     if (table === schema.profiles) return mockProfiles;
     if (table === schema.sessions) return mockSessions;
     if (table === schema.screeningQuestions) return mockScreeningQuestions;
+    if (table === schema.screeningResults) return mockScreeningResults;
     if (table === schema.services) return mockServices;
     if (table === schema.cmsContent) return mockCmsContent;
     return [];
@@ -323,6 +325,44 @@ function createMockDb() {
             },
           }),
         }),
+        leftJoin: (joinTable: any, condition: any) => {
+          const usersList = getTableData(table);
+          const profilesList = getTableData(joinTable);
+
+          const joinedData = usersList.map((u: any) => {
+            const p = profilesList.find((prof: any) => prof.userId === u.id) || {};
+            return {
+              id: u.id,
+              email: u.email,
+              role: u.role,
+              fullName: p.fullName || null,
+              gender: p.gender || null,
+              age: p.age || null,
+              height: p.height || null,
+              weight: p.weight || null,
+              phone: p.phone || null,
+              address: p.address || null,
+              referralCode: p.referralCode || null,
+              tonguePhotoUrl: p.tonguePhotoUrl || null,
+              screeningAnswers: p.screeningAnswers || null,
+              screeningCompletedAt: p.screeningCompletedAt || null,
+              createdAt: u.createdAt,
+            };
+          });
+
+          return {
+            orderBy: (...args: any[]) => {
+              const sorted = [...joinedData].sort(
+                (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+              );
+              return {
+                then: (resolve: any) => resolve(sorted),
+                limit: (n: number) => Promise.resolve(sorted.slice(0, n)),
+              };
+            },
+            then: (resolve: any) => resolve(joinedData),
+          };
+        },
         where: (cond: any) => {
           const filterData = () => {
             const data = getTableData(table);
@@ -497,6 +537,17 @@ async function initRealDatabaseTables(pgPool: pg.Pool) {
       hero_subtitle TEXT NOT NULL,
       content_json TEXT NOT NULL,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS screening_results (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      answers TEXT NOT NULL,
+      score INTEGER NOT NULL,
+      max_score INTEGER NOT NULL,
+      level TEXT NOT NULL,
+      advice TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `;
   await pgPool.query(sql);

@@ -87,3 +87,16 @@ export const cmsContent = pgTable("cms_content", {
   contentJson: text("content_json").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const screeningResults = pgTable("screening_results", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
+  answers: text("answers").notNull(),
+  score: integer("score").notNull(),
+  maxScore: integer("max_score").notNull(),
+  level: text("level").notNull(),
+  advice: text("advice").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});

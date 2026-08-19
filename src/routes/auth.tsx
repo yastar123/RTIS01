@@ -100,13 +100,7 @@ function AuthPage() {
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      const justReg = window.localStorage.getItem("just_registered");
-      if (justReg === "true") {
-        window.localStorage.removeItem("just_registered");
-        navigate({ to: "/skrining" });
-      } else {
-        navigate({ to: "/dashboard" });
-      }
+      navigate({ to: "/dashboard" });
     }
   }, [isAuthenticated, isLoading, navigate]);
 
@@ -231,10 +225,8 @@ function AuthPage() {
       await refetchUser();
       if (mode === "register") {
         window.localStorage.setItem("just_registered", "true");
-        navigate("/skrining");
-      } else {
-        navigate("/dashboard");
       }
+      navigate("/dashboard");
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Terjadi kesalahan");
     } finally {

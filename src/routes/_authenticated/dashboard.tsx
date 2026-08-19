@@ -15,6 +15,7 @@ import {
   ExternalLink,
   Filter,
   Globe,
+  History,
   LayoutDashboard,
   Loader2,
   LogOut,
@@ -52,6 +53,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import {
   serviceOptions,
   fetchServiceOptions,
   formatPrice,
@@ -86,7 +93,7 @@ export function DashboardPage() {
   const [section, setSection] = useState<Section>(() => {
     if (location.pathname === "/profile") return "profile";
     if (location.pathname === "/skrining") return "screening";
-    return "overview";
+    return isAdmin ? "overview" : "screening";
   });
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -97,20 +104,23 @@ export function DashboardPage() {
     else if (location.pathname === "/skrining") setSection("screening");
   }, [location.pathname]);
 
-  const navItems: { key: Section; label: string; icon: typeof LayoutDashboard }[] = [
-    { key: "overview", label: "Ringkasan", icon: LayoutDashboard },
-    { key: "profile", label: "Profil Saya", icon: UserCircle },
-    { key: "screening", label: "Skrening", icon: Stethoscope },
-    { key: "articles", label: "Artikel", icon: BookOpen },
-  ];
-
-  if (isAdmin) {
-    // Insert Reservations at index 2 (between Profile and Screening) for Admin
-    navItems.splice(2, 0, { key: "reservations", label: "Reservasi", icon: CalendarDays });
-    navItems.push({ key: "users", label: "Manajemen User", icon: Users });
-    navItems.push({ key: "cms", label: "Kelola CMS", icon: Globe });
-    navItems.push({ key: "settings", label: "Pengaturan WA", icon: Settings });
-  }
+  const navItems: { key: Section; label: string; icon: typeof LayoutDashboard }[] = isAdmin
+    ? [
+        { key: "overview", label: "Ringkasan", icon: LayoutDashboard },
+        { key: "profile", label: "Profil Saya", icon: UserCircle },
+        { key: "reservations", label: "Reservasi", icon: CalendarDays },
+        { key: "screening", label: "Skrening", icon: Stethoscope },
+        { key: "articles", label: "Artikel", icon: BookOpen },
+        { key: "users", label: "Manajemen User", icon: Users },
+        { key: "cms", label: "Kelola CMS", icon: Globe },
+        { key: "settings", label: "Pengaturan WA", icon: Settings },
+      ]
+    : [
+        { key: "screening", label: "Skrening", icon: Stethoscope },
+        { key: "articles", label: "Artikel", icon: BookOpen },
+        { key: "reservations", label: "Reservasi", icon: CalendarDays },
+        { key: "profile", label: "Profil Saya", icon: UserCircle },
+      ];
 
   return (
     <div className="flex min-h-screen flex-col bg-sand">
@@ -2643,6 +2653,17 @@ interface ScreeningQuestion {
   sortOrder: number;
 }
 
+interface ScreeningResultHistory {
+  id: string;
+  userId: string;
+  answers: string;
+  score: number;
+  maxScore: number;
+  level: string;
+  advice: string;
+  createdAt: string;
+}
+
 function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }) {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -2671,6 +2692,54 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
   // Patient answers
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
+
+  // Profile data and global WhatsApp settings
+  const { data: profile } = useProfile();
+  const [waSettings, setWaSettings] = useState<{
+    whatsappNumber: string;
+    whatsappMessageTemplate: string;
+    whatsappFreeConsultationTemplate?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/settings")
+      .then((res) => res.json())
+      .then((data) => setWaSettings(data))
+      .catch((err) => console.error("Gagal memuat pengaturan WA:", err));
+  }, []);
+
+  // Patient screening history & loading states
+  const [patientTab, setPatientTab] = useState<"new" | "history">("new");
+  const [history, setHistory] = useState<ScreeningResultHistory[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [selectedHistoryItem, setSelectedHistoryItem] = useState<ScreeningResultHistory | null>(
+    null,
+  );
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  const fetchHistory = async () => {
+    if (isAdmin) return;
+    setIsLoadingHistory(true);
+    try {
+      const res = await fetch("/api/profile/screening-results", {
+        headers: authHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHistory(data);
+      }
+    } catch (err) {
+      console.error("Gagal memuat riwayat skrining:", err);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isAdmin) {
+      void fetchHistory();
+    }
+  }, [isAdmin]);
 
   const fetchQuestions = async () => {
     setIsLoading(true);
@@ -2808,8 +2877,138 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
     };
   };
 
+  const getWhatsAppUrlForPatient = () => {
+    if (!profile?.phone) return null;
+    let template =
+      waSettings?.whatsappMessageTemplate ||
+      "Halo [nama],\n\nBerikut adalah hasil skrining TCM Anda. Silakan klik link berikut untuk melihat detail analisis holistik Anda:\n\n[link]\n\nTerima kasih,\nRumah Terapy Ikhtiar Sehat";
+
+    const resultPayload = {
+      nama: profile?.fullName || user?.email.split("@")[0] || "Pasien",
+      usia: profile?.age || 25,
+      kelamin: profile?.gender === "Perempuan" ? "P" : "L",
+      tinggi: profile?.height || 165,
+      berat: profile?.weight || 60,
+      keluhan: profile?.address || "",
+      tonguePhoto: profile?.tonguePhotoUrl || "",
+      answers: answers,
+    };
+    const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
+    const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}`;
+    const name = profile?.fullName || user?.email.split("@")[0] || "Pasien";
+
+    template = template.replace("[nama]", name);
+    template = template.replace("[link]", reportUrl);
+
+    let cleaned = profile.phone.replace(/[^0-9]/g, "");
+    if (cleaned.startsWith("0")) {
+      cleaned = "62" + cleaned.substring(1);
+    } else if (cleaned.startsWith("8")) {
+      cleaned = "62" + cleaned;
+    }
+
+    return `https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(template)}`;
+  };
+
+  const getWhatsAppUrlForClinic = () => {
+    const waNum = waSettings?.whatsappNumber || "6281369729617";
+    let template =
+      "Halo Rumah Terapy Ikhtiar Sehat,\n\nSaya telah menyelesaikan skrining mandiri TCM di website dengan hasil:\nTingkat Risiko: [level]\nSkor: [skor]/[maxSkor]\n\nLink hasil skrining saya:\n[link]";
+
+    const resultPayload = {
+      nama: profile?.fullName || user?.email.split("@")[0] || "Pasien",
+      usia: profile?.age || 25,
+      kelamin: profile?.gender === "Perempuan" ? "P" : "L",
+      tinggi: profile?.height || 165,
+      berat: profile?.weight || 60,
+      keluhan: profile?.address || "",
+      tonguePhoto: profile?.tonguePhotoUrl || "",
+      answers: answers,
+    };
+    const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
+    const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}`;
+    const scoreText = `${totalScore}`;
+    const maxScoreText = `${maxPossibleScore}`;
+    const levelText = getResult().level;
+
+    template = template.replace("[level]", levelText);
+    template = template.replace("[skor]", scoreText);
+    template = template.replace("[maxSkor]", maxScoreText);
+    template = template.replace("[link]", reportUrl);
+
+    return `https://api.whatsapp.com/send?phone=${waNum}&text=${encodeURIComponent(template)}`;
+  };
+
+  const handleSaveScreening = async () => {
+    setIsSaving(true);
+    try {
+      const res = await fetch("/api/profile/screening-results", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(),
+        },
+        body: JSON.stringify({
+          answers: answers,
+          score: totalScore,
+          maxScore: maxPossibleScore,
+          level: getResult().level,
+          advice: getResult().advice,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Gagal menyimpan hasil skrening.");
+      }
+
+      setIsSubmitted(true);
+      void fetchHistory();
+
+      // Automatically open the WhatsApp share link for the patient in a new tab
+      const waUrl = getWhatsAppUrlForPatient();
+      if (waUrl) {
+        window.open(waUrl, "_blank");
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Gagal menyimpan.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-4xl space-y-6">
+      {/* Patient Tab Switcher */}
+      {!isAdmin && (
+        <div className="flex items-center gap-2 border-b pb-3">
+          <Button
+            variant={patientTab === "new" ? "default" : "outline"}
+            size="sm"
+            onClick={() => {
+              setPatientTab("new");
+              setIsSubmitted(false);
+              setAnswers({});
+            }}
+            className="text-xs sm:text-sm gap-1.5"
+          >
+            <Stethoscope className="h-4 w-4" />
+            Isi Skrening Baru
+          </Button>
+          <Button
+            variant={patientTab === "history" ? "default" : "outline"}
+            size="sm"
+            onClick={() => {
+              setPatientTab("history");
+              setSelectedHistoryItem(null);
+              void fetchHistory();
+            }}
+            className="text-xs sm:text-sm gap-1.5"
+          >
+            <History className="h-4 w-4" />
+            Riwayat Skrening Saya ({history.length})
+          </Button>
+        </div>
+      )}
       {/* Admin Mode Sub-Navigation Header */}
       {isAdmin && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
@@ -3017,7 +3216,166 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
             )}
           </div>
         </div>
-      ) : /* PATIENT / TEST VIEW */
+      ) : !isAdmin && patientTab === "history" ? (
+        /* PATIENT HISTORY VIEW */
+        selectedHistoryItem ? (
+          /* DETAILED VIEW OF SPECIFIC HISTORY ATTEMPT */
+          <Card className="bg-card p-5 sm:p-8 shadow-xs space-y-6">
+            <div className="flex items-center justify-between border-b pb-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedHistoryItem(null)}
+                className="gap-1.5 text-xs sm:text-sm"
+              >
+                <ChevronLeft className="h-4 w-4" /> Kembali ke Riwayat
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                {new Date(selectedHistoryItem.createdAt).toLocaleDateString("id-ID", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+            </div>
+
+            <div className="text-center space-y-4">
+              <Badge
+                className={`px-3 py-1 text-xs border ${
+                  selectedHistoryItem.level === "Rendah"
+                    ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
+                    : selectedHistoryItem.level === "Sedang"
+                      ? "bg-amber-500/10 text-amber-700 border-amber-500/30"
+                      : "bg-rose-500/10 text-rose-700 border-rose-500/30"
+                }`}
+              >
+                Tingkat Risiko: {selectedHistoryItem.level}
+              </Badge>
+              <h3 className="font-display text-xl sm:text-2xl font-semibold">
+                Hasil Penilaian Skrening Mandiri
+              </h3>
+              <p className="mx-auto max-w-lg text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                {selectedHistoryItem.advice}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Total Skor: <strong>{selectedHistoryItem.score}</strong> dari maksimum{" "}
+                <strong>{selectedHistoryItem.maxScore}</strong>
+              </p>
+            </div>
+
+            <div className="border-t pt-6 space-y-4">
+              <h4 className="text-sm font-medium text-foreground">Detail Jawaban Anda:</h4>
+              <div className="space-y-3">
+                {questions.map((q, qidx) => {
+                  let answerVal: number | null = null;
+                  try {
+                    const parsedAnswers =
+                      typeof selectedHistoryItem.answers === "string"
+                        ? JSON.parse(selectedHistoryItem.answers)
+                        : selectedHistoryItem.answers;
+                    answerVal = parsedAnswers[q.id] ?? null;
+                  } catch (e) {
+                    console.error("Error parsing answers:", e);
+                  }
+
+                  const labels = ["Tidak pernah", "Kadang", "Sering", "Selalu"];
+                  const answerLabel = answerVal !== null ? labels[answerVal] : "Tidak dijawab";
+
+                  return (
+                    <div
+                      key={q.id}
+                      className="p-3 bg-muted/40 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs sm:text-sm"
+                    >
+                      <div className="space-y-1">
+                        <span className="font-semibold text-primary">Pertanyaan #{qidx + 1}</span>
+                        <p className="text-foreground">{q.questionText}</p>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="shrink-0 self-start sm:self-center bg-background border-primary/30 text-primary"
+                      >
+                        {answerLabel}
+                      </Badge>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </Card>
+        ) : (
+          /* HISTORY LIST */
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium text-foreground">Riwayat Penilaian Kesehatan TCM</h3>
+            {isLoadingHistory ? (
+              <Card className="p-8 text-center">
+                <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary mb-2" />
+                <p className="text-sm text-muted-foreground">Memuat riwayat skrening...</p>
+              </Card>
+            ) : history.length === 0 ? (
+              <Card className="p-8 text-center bg-card">
+                <History className="mx-auto h-12 w-12 text-muted-foreground opacity-40 mb-3" />
+                <p className="text-sm font-medium text-foreground">Belum ada riwayat skrening.</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Silakan pilih tab "Isi Skrening Baru" di atas untuk melakukan skrening pertama
+                  Anda.
+                </p>
+              </Card>
+            ) : (
+              <div className="grid gap-4">
+                {history.map((item) => (
+                  <Card
+                    key={item.id}
+                    className="bg-card border hover:border-primary/40 transition-colors"
+                  >
+                    <CardContent className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-muted-foreground">
+                            {new Date(item.createdAt).toLocaleDateString("id-ID", {
+                              day: "numeric",
+                              month: "long",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                          <Badge
+                            className={`px-2 py-0 text-[10px] border ${
+                              item.level === "Rendah"
+                                ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
+                                : item.level === "Sedang"
+                                  ? "bg-amber-500/10 text-amber-700 border-amber-500/30"
+                                  : "bg-rose-500/10 text-rose-700 border-rose-500/30"
+                            }`}
+                          >
+                            Risiko: {item.level}
+                          </Badge>
+                        </div>
+                        <p className="text-xs sm:text-sm font-medium text-foreground line-clamp-2">
+                          {item.advice}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Skor: <strong>{item.score}</strong> / {item.maxScore}
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedHistoryItem(item)}
+                        className="shrink-0"
+                      >
+                        Lihat Detail
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      ) : /* PATIENT / TEST VIEW (NEW ATTEMPT) */
       !isSubmitted ? (
         <div className="space-y-4">
           {questions.length === 0 ? (
@@ -3086,11 +3444,12 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                 {answeredCount} dari {questions.length} pertanyaan dijawab
               </span>
               <Button
-                disabled={!isComplete}
-                onClick={() => setIsSubmitted(true)}
-                className="w-full sm:w-auto"
+                disabled={!isComplete || isSaving}
+                onClick={handleSaveScreening}
+                className="w-full sm:w-auto gap-2"
               >
-                Lihat Hasil Skrening
+                {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Simpan & Lihat Hasil
               </Button>
             </div>
           )}
@@ -3101,7 +3460,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
             Tingkat Risiko: {getResult().level}
           </Badge>
           <h2 className="font-display text-xl sm:text-2xl font-semibold">
-            Hasil Penilaian Skrening Mandiri
+            Hasil Penilaian Skrening Mandiri Berhasil Disimpan
           </h2>
           <p className="mx-auto max-w-lg text-xs sm:text-sm text-muted-foreground leading-relaxed">
             {getResult().advice}
@@ -3114,6 +3473,24 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
             <Button onClick={() => onNavigate("reservations")}>
               <CalendarDays className="mr-1.5 h-4 w-4" /> Jadwalkan Konsultasi
             </Button>
+            {profile?.phone && (
+              <a
+                href={getWhatsAppUrlForPatient() || "#"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
+              >
+                <Phone className="mr-1 h-4 w-4" /> Kirim Hasil ke WhatsApp Saya
+              </a>
+            )}
+            <a
+              href={getWhatsAppUrlForClinic() || "#"}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-teal-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-teal-700 transition-colors"
+            >
+              <Phone className="mr-1 h-4 w-4" /> Kirim Hasil ke WhatsApp Klinik
+            </a>
             <Button
               variant="outline"
               onClick={() => {
@@ -3537,6 +3914,7 @@ interface RegisteredUser {
   address: string | null;
   referralCode: string | null;
   tonguePhotoUrl: string | null;
+  screeningAnswers?: string | null;
   createdAt: string;
 }
 
@@ -3548,6 +3926,7 @@ function UsersTab() {
   const [whatsappSettings, setWhatsappSettings] = useState<{
     whatsappNumber: string;
     whatsappMessageTemplate: string;
+    whatsappFreeConsultationTemplate?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -3562,10 +3941,58 @@ function UsersTab() {
     let template =
       whatsappSettings.whatsappMessageTemplate ||
       "Halo [nama],\n\nBerikut adalah hasil skrining TCM Anda. Silakan klik link berikut untuk melihat detail analisis holistik Anda:\n\n[link]\n\nTerima kasih,\nRumah Terapy Ikhtiar Sehat";
-    const reportUrl = `${window.location.origin}/skrining?userId=${u.id}`;
+
+    let reportUrl = `${window.location.origin}/skrining?userId=${u.id}`;
+    if (u.screeningAnswers) {
+      try {
+        const parsed =
+          typeof u.screeningAnswers === "string"
+            ? JSON.parse(u.screeningAnswers)
+            : u.screeningAnswers;
+        const answers = parsed?.answers || parsed || {};
+        const keluhan = parsed?.keluhan || u.address || "";
+        const tonguePhoto = parsed?.tonguePhoto || u.tonguePhotoUrl || "";
+
+        const resultPayload = {
+          nama: u.fullName || "Pasien",
+          usia: u.age || 25,
+          kelamin: u.gender === "Perempuan" ? "P" : "L",
+          tinggi: u.height || 165,
+          berat: u.weight || 60,
+          keluhan: keluhan,
+          tonguePhoto: tonguePhoto,
+          answers: answers,
+        };
+        const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
+        reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}`;
+      } catch (err) {
+        console.error("Gagal memformat data skrining untuk link WhatsApp:", err);
+      }
+    }
 
     template = template.replace("[nama]", u.fullName || "Pasien");
     template = template.replace("[link]", reportUrl);
+
+    const phoneNum = u.phone || "";
+    let cleaned = phoneNum.replace(/[^0-9]/g, "");
+    if (cleaned.startsWith("0")) {
+      cleaned = "62" + cleaned.substring(1);
+    } else if (cleaned.startsWith("8")) {
+      cleaned = "62" + cleaned;
+    }
+
+    return `https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(template)}`;
+  };
+
+  const getWhatsAppFreeConsultationUrl = (u: RegisteredUser) => {
+    if (!whatsappSettings) return "";
+    let template =
+      whatsappSettings.whatsappFreeConsultationTemplate ||
+      "Halo [nama],\n\nKabar gembira! Rumah Terapy Ikhtiar Sehat sedang membuka layanan Konsultasi Kesehatan TCM Gratis secara online. Silakan klik link berikut untuk memulai konsultasi gratis Anda dengan praktisi kami:\n\n[link]\n\nYuk, jaga kesehatan tubuh Anda secara alami!\nSalam sehat,\nRumah Terapy Ikhtiar Sehat";
+    const consultUrl = `${window.location.origin}/skrining?userId=${u.id}`;
+
+    template = template.replace("[nama]", u.fullName || "Pasien");
+    template = template.replace("[link]", consultUrl);
 
     const phoneNum = u.phone || "";
     let cleaned = phoneNum.replace(/[^0-9]/g, "");
@@ -3854,15 +4281,43 @@ function UsersTab() {
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-1.5">
                           {u.phone && (
-                            <a
-                              href={getWhatsAppUserUrl(u)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex h-9 w-9 items-center justify-center rounded-md text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
-                              title="Kirim Hasil Skrining via WhatsApp"
-                            >
-                              <Phone className="h-4 w-4" />
-                            </a>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-9 w-9 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                  title="Kirim WhatsApp"
+                                >
+                                  <Phone className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent
+                                align="end"
+                                className="w-56 bg-white border border-emerald-100"
+                              >
+                                <DropdownMenuItem asChild>
+                                  <a
+                                    href={getWhatsAppUserUrl(u)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex w-full items-center gap-2 cursor-pointer"
+                                  >
+                                    <span>🩺 Kirim Hasil Skrining</span>
+                                  </a>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                  <a
+                                    href={getWhatsAppFreeConsultationUrl(u)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex w-full items-center gap-2 cursor-pointer"
+                                  >
+                                    <span>🎁 Kirim Broadcast Konsultasi</span>
+                                  </a>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           )}
                           <Button
                             variant="ghost"
@@ -3933,15 +4388,43 @@ function UsersTab() {
 
                   <div className="flex justify-end gap-2 pt-2 border-t">
                     {u.phone && (
-                      <a
-                        href={getWhatsAppUserUrl(u)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex h-8 items-center gap-1 px-3 text-xs font-semibold rounded-md border border-emerald-200 text-emerald-700 hover:bg-emerald-50 bg-emerald-50/20 transition-colors"
-                      >
-                        <Phone className="h-3.5 w-3.5" />
-                        <span>Kirim WA</span>
-                      </a>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs gap-1 border-emerald-200 text-emerald-700 hover:bg-emerald-50 bg-emerald-50/20 font-semibold"
+                          >
+                            <Phone className="h-3.5 w-3.5" />
+                            <span>Kirim WA</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                          className="w-56 bg-white border border-emerald-100"
+                        >
+                          <DropdownMenuItem asChild>
+                            <a
+                              href={getWhatsAppUserUrl(u)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex w-full items-center gap-2 cursor-pointer"
+                            >
+                              <span>🩺 Kirim Hasil Skrining</span>
+                            </a>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <a
+                              href={getWhatsAppFreeConsultationUrl(u)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex w-full items-center gap-2 cursor-pointer"
+                            >
+                              <span>🎁 Kirim Broadcast Konsultasi</span>
+                            </a>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     )}
                     <Button
                       variant="outline"
@@ -4155,6 +4638,7 @@ function UsersTab() {
 function SettingsTab() {
   const [whatsappNumber, setWhatsappNumber] = useState("");
   const [whatsappMessageTemplate, setWhatsappMessageTemplate] = useState("");
+  const [whatsappFreeConsultationTemplate, setWhatsappFreeConsultationTemplate] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -4176,6 +4660,10 @@ function SettingsTab() {
       setWhatsappMessageTemplate(
         data.whatsappMessageTemplate ||
           "Halo [nama],\n\nBerikut adalah hasil skrining TCM Anda. Silakan klik link berikut untuk melihat detail analisis holistik Anda:\n\n[link]\n\nTerima kasih,\nRumah Terapy Ikhtiar Sehat",
+      );
+      setWhatsappFreeConsultationTemplate(
+        data.whatsappFreeConsultationTemplate ||
+          "Halo [nama],\n\nKabar gembira! Rumah Terapy Ikhtiar Sehat sedang membuka layanan Konsultasi Kesehatan TCM Gratis secara online. Silakan klik link berikut untuk memulai konsultasi gratis Anda dengan praktisi kami:\n\n[link]\n\nYuk, jaga kesehatan tubuh Anda secara alami!\nSalam sehat,\nRumah Terapy Ikhtiar Sehat",
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Terjadi kesalahan.");
@@ -4201,7 +4689,11 @@ function SettingsTab() {
           "Content-Type": "application/json",
           ...authHeaders(),
         },
-        body: JSON.stringify({ whatsappNumber, whatsappMessageTemplate }),
+        body: JSON.stringify({
+          whatsappNumber,
+          whatsappMessageTemplate,
+          whatsappFreeConsultationTemplate,
+        }),
       });
 
       const data = await res.json();
@@ -4211,6 +4703,7 @@ function SettingsTab() {
 
       setWhatsappNumber(data.whatsappNumber);
       setWhatsappMessageTemplate(data.whatsappMessageTemplate);
+      setWhatsappFreeConsultationTemplate(data.whatsappFreeConsultationTemplate);
       setMessage("Pengaturan WhatsApp berhasil diperbarui!");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal menyimpan.");
@@ -4281,6 +4774,36 @@ function SettingsTab() {
                       [link]
                     </code>{" "}
                     - Diganti dengan link laporan skrining pasien
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="wa-consult-template">Pesan Broadcast Konsultasi Gratis *</Label>
+              <textarea
+                id="wa-consult-template"
+                required
+                rows={6}
+                placeholder="Masukkan draf pesan broadcast konsultasi gratis..."
+                value={whatsappFreeConsultationTemplate}
+                onChange={(e) => setWhatsappFreeConsultationTemplate(e.target.value)}
+                className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              />
+              <div className="rounded-md bg-emerald-50/50 p-3 border border-emerald-100/60 text-xs text-emerald-900 space-y-1">
+                <p className="font-semibold">Placeholder Dinamis yang Didukung:</p>
+                <ul className="list-disc list-inside space-y-0.5 ml-1">
+                  <li>
+                    <code className="bg-emerald-100/80 px-1 py-0.5 rounded text-emerald-950 font-mono font-bold">
+                      [nama]
+                    </code>{" "}
+                    - Diganti dengan nama lengkap pasien
+                  </li>
+                  <li>
+                    <code className="bg-emerald-100/80 px-1 py-0.5 rounded text-emerald-950 font-mono font-bold">
+                      [link]
+                    </code>{" "}
+                    - Diganti dengan link skrining/konsultasi pasien
                   </li>
                 </ul>
               </div>

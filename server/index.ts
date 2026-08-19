@@ -12,6 +12,7 @@ import {
   profiles,
   reservations,
   screeningQuestions,
+  screeningResults,
   services,
   sessions,
   users,
@@ -328,6 +329,100 @@ app.put("/api/profile/screening", async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: error instanceof Error ? error.message : "Gagal menyimpan hasil skrining.",
+    });
+  }
+});
+
+app.post("/api/profile/screening-results", async (req, res) => {
+  try {
+    const user = await requireUser(req, res);
+    if (!user) return;
+
+    const { answers, score, maxScore, level, advice } = req.body;
+    if (
+      answers === undefined ||
+      score === undefined ||
+      maxScore === undefined ||
+      !level ||
+      !advice
+    ) {
+      return res.status(400).json({ message: "Data hasil skrining tidak lengkap." });
+    }
+
+    const db = getDb();
+    const answersStr = typeof answers === "string" ? answers : JSON.stringify(answers);
+
+    // Save to screening_results table
+    const [inserted] = await db
+      .insert(screeningResults)
+      .values({
+        userId: user.id,
+        answers: answersStr,
+        score: Number(score),
+        maxScore: Number(maxScore),
+        level,
+        advice,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    // Also update profiles table so legacy/other pages can see the latest
+    const [existingProfile] = await db
+      .select()
+      .from(profiles)
+      .where(eq(profiles.userId, user.id))
+      .limit(1);
+
+    if (existingProfile) {
+      await db
+        .update(profiles)
+        .set({
+          screeningAnswers: answersStr,
+          screeningCompletedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(profiles.userId, user.id));
+    } else {
+      // Create a profile fallback if somehow not present
+      await db.insert(profiles).values({
+        userId: user.id,
+        fullName: user.email.split("@")[0],
+        gender: "Laki-laki",
+        age: 25,
+        height: 165,
+        weight: 60,
+        phone: "",
+        address: "",
+        screeningAnswers: answersStr,
+        screeningCompletedAt: new Date(),
+        updatedAt: new Date(),
+      });
+    }
+
+    res.json(inserted);
+  } catch (error) {
+    res.status(500).json({
+      message: error instanceof Error ? error.message : "Gagal menyimpan hasil skrining.",
+    });
+  }
+});
+
+app.get("/api/profile/screening-results", async (req, res) => {
+  try {
+    const user = await requireUser(req, res);
+    if (!user) return;
+
+    const db = getDb();
+    const results = await db
+      .select()
+      .from(screeningResults)
+      .where(eq(screeningResults.userId, user.id))
+      .orderBy(desc(screeningResults.createdAt));
+
+    res.json(results);
+  } catch (error) {
+    res.status(500).json({
+      message: error instanceof Error ? error.message : "Gagal mengambil riwayat skrining.",
     });
   }
 });
@@ -1095,6 +1190,10 @@ app.get("/api/settings", async (req, res) => {
         parsed.whatsappMessageTemplate =
           "Halo [nama],\n\nBerikut adalah hasil skrining TCM Anda. Silakan klik link berikut untuk melihat detail analisis holistik Anda:\n\n[link]\n\nTerima kasih,\nRumah Terapy Ikhtiar Sehat";
       }
+      if (!parsed.whatsappFreeConsultationTemplate) {
+        parsed.whatsappFreeConsultationTemplate =
+          "Halo [nama],\n\nKabar gembira! Rumah Terapy Ikhtiar Sehat sedang membuka layanan Konsultasi Kesehatan TCM Gratis secara online. Silakan klik link berikut untuk memulai konsultasi gratis Anda dengan praktisi kami:\n\n[link]\n\nYuk, jaga kesehatan tubuh Anda secara alami!\nSalam sehat,\nRumah Terapy Ikhtiar Sehat";
+      }
       return res.json(parsed);
     }
 
@@ -1102,6 +1201,8 @@ app.get("/api/settings", async (req, res) => {
       whatsappNumber: "6281369729617",
       whatsappMessageTemplate:
         "Halo [nama],\n\nBerikut adalah hasil skrining TCM Anda. Silakan klik link berikut untuk melihat detail analisis holistik Anda:\n\n[link]\n\nTerima kasih,\nRumah Terapy Ikhtiar Sehat",
+      whatsappFreeConsultationTemplate:
+        "Halo [nama],\n\nKabar gembira! Rumah Terapy Ikhtiar Sehat sedang membuka layanan Konsultasi Kesehatan TCM Gratis secara online. Silakan klik link berikut untuk memulai konsultasi gratis Anda dengan praktisi kami:\n\n[link]\n\nYuk, jaga kesehatan tubuh Anda secara alami!\nSalam sehat,\nRumah Terapy Ikhtiar Sehat",
     };
     await db.insert(cmsContent).values({
       pageKey: "settings",
@@ -1122,7 +1223,7 @@ app.get("/api/settings", async (req, res) => {
 app.put("/api/admin/settings", async (req, res) => {
   try {
     if (!(await requireAdmin(req, res))) return;
-    const { whatsappNumber, whatsappMessageTemplate } = req.body;
+    const { whatsappNumber, whatsappMessageTemplate, whatsappFreeConsultationTemplate } = req.body;
     if (!whatsappNumber) {
       return res.status(400).json({ message: "Nomor WhatsApp wajib diisi." });
     }
@@ -1145,6 +1246,9 @@ app.put("/api/admin/settings", async (req, res) => {
       whatsappMessageTemplate:
         whatsappMessageTemplate ??
         "Halo [nama],\n\nBerikut adalah hasil skrining TCM Anda. Silakan klik link berikut untuk melihat detail analisis holistik Anda:\n\n[link]\n\nTerima kasih,\nRumah Terapy Ikhtiar Sehat",
+      whatsappFreeConsultationTemplate:
+        whatsappFreeConsultationTemplate ??
+        "Halo [nama],\n\nKabar gembira! Rumah Terapy Ikhtiar Sehat sedang membuka layanan Konsultasi Kesehatan TCM Gratis secara online. Silakan klik link berikut untuk memulai konsultasi gratis Anda dengan praktisi kami:\n\n[link]\n\nYuk, jaga kesehatan tubuh Anda secara alami!\nSalam sehat,\nRumah Terapy Ikhtiar Sehat",
     };
 
     if (existing) {
@@ -1247,7 +1351,7 @@ async function start() {
   } else {
     const distPath = path.join(process.cwd(), "dist", "client");
     app.use(express.static(distPath));
-    app.get("/*splat", (_req, res) => res.sendFile(path.join(distPath, "index.html")));
+    app.get("*all", (_req, res) => res.sendFile(path.join(distPath, "index.html")));
   }
   const port = Number(process.env.PORT ?? 3000);
   app.listen(port, "0.0.0.0", () => console.log(`Express server berjalan di port ${port}`));
