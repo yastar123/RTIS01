@@ -1,4 +1,5 @@
 import "dotenv/config";
+import fs from "node:fs";
 import path from "node:path";
 import express from "express";
 import { createServer as createViteServer } from "vite";
@@ -1381,9 +1382,14 @@ async function start() {
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist", "client");
+    const clientDist = path.join(process.cwd(), "dist", "client");
+    const rootDist = path.join(process.cwd(), "dist");
+    const distPath = fs.existsSync(path.join(clientDist, "index.html")) ? clientDist : rootDist;
     app.use(express.static(distPath));
-    app.get("*all", (_req, res) => res.sendFile(path.join(distPath, "index.html")));
+    app.use((req, res, next) => {
+      if (req.path.startsWith("/api")) return next();
+      res.sendFile(path.join(distPath, "index.html"));
+    });
   }
   const port = Number(process.env.PORT ?? 3000);
   app.listen(port, "0.0.0.0", () => console.log(`Express server berjalan di port ${port}`));

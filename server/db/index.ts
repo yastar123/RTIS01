@@ -563,17 +563,16 @@ async function initRealDatabaseTables(pgPool: pg.Pool) {
 
 export function getDb(): any {
   const dbUrl = process.env.DATABASE_URL;
-  const isPlaceholderUrl =
-    !dbUrl ||
-    dbUrl.includes("user:password@host") ||
-    dbUrl.includes("localhost") ||
-    dbUrl.trim() === "";
+  const isPlaceholderUrl = !dbUrl || dbUrl.includes("user:password@host") || dbUrl.trim() === "";
 
   if (!isPlaceholderUrl) {
     if (!realDbChecked) {
       realDbChecked = true;
       try {
-        pool = new Pool({ connectionString: dbUrl, connectionTimeoutMillis: 3000 });
+        pool = new Pool({ connectionString: dbUrl, connectionTimeoutMillis: 5000 });
+        pool.on("error", (err) => {
+          console.warn("[AI Studio] Unexpected PostgreSQL client error:", err);
+        });
         realDb = drizzle(pool, { schema });
         isRealDbWorking = true;
         initRealDatabaseTables(pool).catch((err) => {
