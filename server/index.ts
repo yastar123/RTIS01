@@ -17,6 +17,7 @@ import {
   sessions,
   users,
 } from "./db/schema";
+import { generateGeminiTcmAnalysis } from "./geminiTcm";
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
@@ -423,6 +424,29 @@ app.get("/api/profile/screening-results", async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: error instanceof Error ? error.message : "Gagal mengambil riwayat skrining.",
+    });
+  }
+});
+
+app.post("/api/screening/generate-ai-analysis", async (req, res) => {
+  try {
+    const { answers, questions, patientProfile, basicResults } = req.body;
+    if (!answers || typeof answers !== "object") {
+      return res.status(400).json({ message: "Data jawaban kuesioner diperlukan." });
+    }
+
+    const aiReport = await generateGeminiTcmAnalysis({
+      answers,
+      questions,
+      patientProfile,
+      basicResults,
+    });
+
+    res.json(aiReport);
+  } catch (error) {
+    console.error("[API] Gagal generate analisa TCM AI:", error);
+    res.status(500).json({
+      message: error instanceof Error ? error.message : "Gagal melakukan analisa TCM berbasis AI.",
     });
   }
 });
@@ -1281,20 +1305,28 @@ async function ensureAdminAccount() {
   try {
     const db = getDb();
     const adminEmail = (process.env.ADMIN_EMAIL ?? "admin@rumahterapy.id").trim().toLowerCase();
+    const adminPassword = process.env.ADMIN_PASSWORD ?? "admin123456";
+    const passwordHash = await bcrypt.hash(adminPassword, 10);
+
     const [existingAdmin] = await db
       .select()
       .from(users)
       .where(eq(users.email, adminEmail))
       .limit(1);
-    if (!existingAdmin) {
-      const adminPassword = process.env.ADMIN_PASSWORD ?? "admin123456";
-      const passwordHash = await bcrypt.hash(adminPassword, 10);
+
+    if (existingAdmin) {
+      await db
+        .update(users)
+        .set({ passwordHash, role: "admin" })
+        .where(eq(users.id, existingAdmin.id));
+      console.log(`[AI Studio] Akun admin disinkronkan & diperbarui: ${adminEmail}`);
+    } else {
       await db.insert(users).values({
         email: adminEmail,
         passwordHash,
         role: "admin",
       });
-      console.log(`[AI Studio] Akun admin demo diatur: ${adminEmail}`);
+      console.log(`[AI Studio] Akun admin dibuat: ${adminEmail}`);
     }
   } catch (err) {
     console.error("[AI Studio] Gagal menyiapkan akun admin:", err);

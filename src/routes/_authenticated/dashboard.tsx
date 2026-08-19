@@ -155,7 +155,7 @@ export function DashboardPage() {
 
           <div className="flex items-center gap-2">
             <img
-              src="/logon.png"
+              src="/logo.png"
               alt="Logo Rumah Terapy"
               className="h-9 w-auto shrink-0 rounded-lg bg-white p-0.5 border"
             />
@@ -314,7 +314,7 @@ export function DashboardPage() {
           <div className="flex items-center justify-between border-b pb-4">
             <div className="flex items-center gap-2.5">
               <img
-                src="/logon.png"
+                src="/logo.png"
                 alt="Logo Rumah Terapy"
                 className="h-8 w-auto bg-white p-0.5 rounded-lg border"
               />
@@ -2716,6 +2716,8 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
     null,
   );
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [historyDetailQuestionsPage, setHistoryDetailQuestionsPage] = useState(1);
+  const [submittedQuestionsPage, setSubmittedQuestionsPage] = useState(1);
 
   const fetchHistory = async () => {
     if (isAdmin) return;
@@ -3266,42 +3268,62 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
             </div>
 
             <div className="border-t pt-6 space-y-4">
-              <h4 className="text-sm font-medium text-foreground">Detail Jawaban Anda:</h4>
-              <div className="space-y-3">
-                {questions.map((q, qidx) => {
-                  let answerVal: number | null = null;
-                  try {
-                    const parsedAnswers =
-                      typeof selectedHistoryItem.answers === "string"
-                        ? JSON.parse(selectedHistoryItem.answers)
-                        : selectedHistoryItem.answers;
-                    answerVal = parsedAnswers[q.id] ?? null;
-                  } catch (e) {
-                    console.error("Error parsing answers:", e);
-                  }
-
-                  const labels = ["Tidak pernah", "Kadang", "Sering", "Selalu"];
-                  const answerLabel = answerVal !== null ? labels[answerVal] : "Tidak dijawab";
-
-                  return (
-                    <div
-                      key={q.id}
-                      className="p-3 bg-muted/40 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs sm:text-sm"
-                    >
-                      <div className="space-y-1">
-                        <span className="font-semibold text-primary">Pertanyaan #{qidx + 1}</span>
-                        <p className="text-foreground">{q.questionText}</p>
-                      </div>
-                      <Badge
-                        variant="outline"
-                        className="shrink-0 self-start sm:self-center bg-background border-primary/30 text-primary"
-                      >
-                        {answerLabel}
-                      </Badge>
-                    </div>
-                  );
-                })}
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium text-foreground">Detail Jawaban Anda:</h4>
+                <span className="text-xs text-muted-foreground">
+                  Total {questions.length} Pertanyaan
+                </span>
               </div>
+              <div className="space-y-3">
+                {questions
+                  .slice((historyDetailQuestionsPage - 1) * 5, historyDetailQuestionsPage * 5)
+                  .map((q, idx) => {
+                    const globalIdx = (historyDetailQuestionsPage - 1) * 5 + idx;
+                    let answerVal: number | null = null;
+                    try {
+                      const parsedAnswers =
+                        typeof selectedHistoryItem.answers === "string"
+                          ? JSON.parse(selectedHistoryItem.answers)
+                          : selectedHistoryItem.answers;
+                      answerVal = parsedAnswers[q.id] ?? null;
+                    } catch (e) {
+                      console.error("Error parsing answers:", e);
+                    }
+
+                    const labels = ["Tidak pernah", "Kadang", "Sering", "Selalu"];
+                    const answerLabel = answerVal !== null ? labels[answerVal] : "Tidak dijawab";
+
+                    return (
+                      <div
+                        key={q.id}
+                        className="p-3 bg-muted/40 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs sm:text-sm"
+                      >
+                        <div className="space-y-1">
+                          <span className="font-semibold text-primary">
+                            Pertanyaan #{globalIdx + 1}
+                          </span>
+                          <p className="text-foreground">{q.questionText}</p>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className="shrink-0 self-start sm:self-center bg-background border-primary/30 text-primary font-medium"
+                        >
+                          {answerLabel} {answerVal !== null ? `(${answerVal} pt)` : ""}
+                        </Badge>
+                      </div>
+                    );
+                  })}
+              </div>
+
+              {questions.length > 5 && (
+                <PaginationControls
+                  currentPage={historyDetailQuestionsPage}
+                  totalPages={Math.ceil(questions.length / 5) || 1}
+                  totalItems={questions.length}
+                  itemsPerPage={5}
+                  onPageChange={setHistoryDetailQuestionsPage}
+                />
+              )}
             </div>
           </Card>
         ) : (
@@ -3455,21 +3477,96 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
           )}
         </div>
       ) : (
-        <Card className="bg-card p-5 sm:p-8 shadow-xs text-center space-y-4">
-          <Badge className={`px-3 py-1 text-xs border ${getResult().color}`}>
-            Tingkat Risiko: {getResult().level}
-          </Badge>
-          <h2 className="font-display text-xl sm:text-2xl font-semibold">
-            Hasil Penilaian Skrening Mandiri Berhasil Disimpan
-          </h2>
-          <p className="mx-auto max-w-lg text-xs sm:text-sm text-muted-foreground leading-relaxed">
-            {getResult().advice}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Total Skor: <strong>{totalScore}</strong> dari maksimum{" "}
-            <strong>{maxPossibleScore}</strong> ({questions.length} soal)
-          </p>
-          <div className="flex flex-wrap justify-center gap-3 pt-4">
+        <Card className="bg-card p-5 sm:p-8 shadow-xs text-center space-y-6">
+          <div className="space-y-3">
+            <Badge className={`px-3 py-1 text-xs border ${getResult().color}`}>
+              Tingkat Risiko: {getResult().level}
+            </Badge>
+            <h2 className="font-display text-xl sm:text-2xl font-semibold">
+              Hasil Penilaian Skrening Mandiri Berhasil Disimpan
+            </h2>
+            <p className="mx-auto max-w-lg text-xs sm:text-sm text-muted-foreground leading-relaxed">
+              {getResult().advice}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Total Skor: <strong>{totalScore}</strong> dari maksimum{" "}
+              <strong>{maxPossibleScore}</strong> ({questions.length} soal)
+            </p>
+          </div>
+
+          {/* Questionnaire response history with pagination */}
+          <div className="border-t pt-6 space-y-4 text-left">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-semibold text-foreground">
+                  Riwayat Pengisian & Detail Jawaban Soal
+                </h4>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Rincian jawaban yang baru saja Anda isi pada kuesioner skrining:
+                </p>
+              </div>
+              <Badge variant="secondary" className="text-xs">
+                {Object.keys(answers).length} / {questions.length} Dijawab
+              </Badge>
+            </div>
+
+            <div className="space-y-3">
+              {questions
+                .slice((submittedQuestionsPage - 1) * 5, submittedQuestionsPage * 5)
+                .map((q, idx) => {
+                  const globalIdx = (submittedQuestionsPage - 1) * 5 + idx;
+                  const answerVal = answers[q.id];
+                  const labels = [
+                    { label: "Tidak pernah", score: 0 },
+                    { label: "Kadang", score: 1 },
+                    { label: "Sering", score: 2 },
+                    { label: "Selalu", score: 3 },
+                  ];
+                  return (
+                    <div
+                      key={q.id}
+                      className="p-3.5 bg-muted/30 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs sm:text-sm"
+                    >
+                      <div className="space-y-1 flex-1">
+                        <span className="text-[11px] font-bold text-primary">
+                          Soal #{globalIdx + 1}
+                        </span>
+                        <p className="font-medium text-foreground">{q.questionText}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 shrink-0">
+                        {labels.map((opt) => {
+                          const active = answerVal === opt.score;
+                          return (
+                            <span
+                              key={opt.score}
+                              className={`rounded-md px-2 py-0.5 text-[11px] ${
+                                active
+                                  ? "bg-primary text-primary-foreground font-semibold"
+                                  : "bg-muted text-muted-foreground opacity-60 border"
+                              }`}
+                            >
+                              {opt.label} ({opt.score})
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {questions.length > 5 && (
+              <PaginationControls
+                currentPage={submittedQuestionsPage}
+                totalPages={Math.ceil(questions.length / 5) || 1}
+                totalItems={questions.length}
+                itemsPerPage={5}
+                onPageChange={setSubmittedQuestionsPage}
+              />
+            )}
+          </div>
+
+          <div className="flex flex-wrap justify-center gap-3 pt-4 border-t">
             <Button onClick={() => onNavigate("reservations")}>
               <CalendarDays className="mr-1.5 h-4 w-4" /> Jadwalkan Konsultasi
             </Button>

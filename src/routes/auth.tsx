@@ -249,7 +249,7 @@ function AuthPage() {
           <div className="relative z-10">
             <div className="flex items-center gap-3">
               <img
-                src="/logon.png"
+                src="/logo.png"
                 alt="Logo Rumah Terapy"
                 className="h-14 w-auto rounded-xl bg-white p-1"
               />
@@ -277,7 +277,7 @@ function AuthPage() {
         <div className="no-scrollbar flex min-h-screen flex-col justify-start overflow-y-auto p-6 md:max-h-screen md:py-12 md:px-12 lg:px-20">
           <div className="m-auto w-full max-w-xl">
             <div className="mb-6 flex justify-center md:hidden">
-              <img src="/logon.png" alt="Logo Rumah Terapy" className="h-16 w-auto" />
+              <img src="/logo.png" alt="Logo Rumah Terapy" className="h-16 w-auto" />
             </div>
             <div className="mb-6 text-center md:text-left">
               <h1 className="font-display text-2xl font-medium text-foreground md:text-3xl">

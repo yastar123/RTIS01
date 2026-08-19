@@ -1,4 +1,4 @@
-import { useState, useEffect, FormEvent, useRef } from "react";
+import { useState, useEffect, FormEvent, useRef, useCallback } from "react";
 import { createFileRoute, Link } from "@/lib/route";
 import { useAuth, authHeaders, useProfile } from "@/hooks/use-auth";
 import { PageHeader } from "@/components/site/PageHeader";
@@ -8,6 +8,7 @@ import {
   Image as ImageIcon,
   AlertCircle,
   ArrowLeft,
+  ChevronLeft,
   ChevronRight,
   Heart,
   Scale,
@@ -22,6 +23,7 @@ import {
   User,
   ExternalLink,
 } from "lucide-react";
+import { TcmHerbalReport, TcmAiReport } from "@/components/screening/TcmHerbalReport";
 
 export const Route = createFileRoute("/_authenticated/skrining")({
   head: () => ({
@@ -281,6 +283,11 @@ function Skrining() {
   const [loading, setLoading] = useState(true);
   const [submitted, setSubmitted] = useState(false);
   const [step, setStep] = useState<"profile" | "questions" | "result">("profile");
+  const [historyQuestionsPage, setHistoryQuestionsPage] = useState(1);
+
+  // AI Generated TCM & Herbal State
+  const [aiReport, setAiReport] = useState<TcmAiReport | null>(null);
+  const [isLoadingAi, setIsLoadingAi] = useState(false);
 
   // Shared Screening and Broadcast States
   const [isViewingShared, setIsViewingShared] = useState(false);
@@ -326,8 +333,29 @@ function Skrining() {
   // Handle loading shared screening result on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const resultDataParam = params.get("resultData");
     const sharedUserId = params.get("userId");
-    if (sharedUserId) {
+
+    if (resultDataParam) {
+      setIsViewingShared(true);
+      try {
+        const decoded = JSON.parse(decodeURIComponent(atob(resultDataParam)));
+        if (decoded) {
+          setNama(decoded.nama || "");
+          setUsia(decoded.usia ? String(decoded.usia) : "25");
+          setKelamin(decoded.kelamin || "L");
+          setTinggi(decoded.tinggi ? String(decoded.tinggi) : "165");
+          setBerat(decoded.berat ? String(decoded.berat) : "60");
+          setKeluhan(decoded.keluhan || "");
+          setTonguePhoto(decoded.tonguePhoto || "");
+          setJawaban(decoded.answers || {});
+          setStep("result");
+          setSubmitted(true);
+        }
+      } catch (err) {
+        console.error("Gagal memendekkan/mengurai data skrining:", err);
+      }
+    } else if (sharedUserId) {
       setIsViewingShared(true);
       setLoading(true);
       fetch(`/api/profile/${sharedUserId}/screening`)
@@ -503,6 +531,130 @@ function Skrining() {
   };
 
   const results = calculateTcmResult();
+
+  const getDominantConstitution = () => {
+    const list = [
+      {
+        name: "Defisiensi Qi (Kekurangan Energi)",
+        pct: results.imbalEnergy,
+        desc: "Energi vital tubuh menurun, mudah lelah setelah beraktivitas, nafas pendek, dan pemulihan lambat.",
+        dietDianjurkan:
+          "Ubi manis, kurma, jahe hangat, daging ayam kampung, beras merah, kaldu tulang.",
+        dietDihindari:
+          "Makanan mentah (salad dingin), es, makanan terlalu asam, dan gorengan berlemak.",
+        lifestyle:
+          "Tidur sebelum jam 23.00, hindari begadang, latihan pernapasan ringan (Qigong / jalan santai).",
+        acupressure: "Zusanli (ST36)",
+        acupressureLoc: "4 jari di bawah tempurung lutut, 1 jari ke arah luar tulang kering.",
+        acupressureFunc:
+          "Menguatkan energi limpa dan lambung, mendongkrak stamina dan metabolisme.",
+      },
+      {
+        name: "Defisiensi Yang (Kelemahan Hangat Vital)",
+        pct: results.imbalYang,
+        desc: "Kelemahan energi api metabolisme tubuh, anggota gerak mudah dingin, rentan diare/feses lembek.",
+        dietDianjurkan:
+          "Kayu manis, jahe merah, cengkeh, lada hitam, daging kambing/sapi berkuah hangat.",
+        dietDihindari: "Minuman es, blewah, semangka, mentimun, dan sayur mentah.",
+        lifestyle:
+          "Kenakan pakaian hangat, jemur punggung di bawah sinar matahari pagi, rendam kaki air hangat.",
+        acupressure: "Guanyuan (CV4)",
+        acupressureLoc: "4 jari di bawah pusar.",
+        acupressureFunc: "Menghangatkan Yang Ginjal dan memulihkan energi esensial dasar tubuh.",
+      },
+      {
+        name: "Defisiensi Yin (Kekurangan Cairan Esensial)",
+        pct: results.imbalYin,
+        desc: "Kekeringan cairan tubuh, sensasi panas di telapak tangan/kaki, tenggorokan kering, tidur gelisah.",
+        dietDianjurkan:
+          "Goji berry (Kou Qi Zi), jamur kuping putih, pir kukus, biji teratai, madu murni.",
+        dietDihindari: "Makanan pedas menyengat, kopi berlebih, gorengan garing, dan alkohol.",
+        lifestyle:
+          "Kelola stres, meditasi menenangkan Shen, minum air putih hangat secara berkala.",
+        acupressure: "Taixi (KI3)",
+        acupressureLoc: "Lekukan antara mata kaki bagian dalam dan tendon Achilles.",
+        acupressureFunc: "Menutrisi Yin Ginjal, meredakan sensasi panas dan menenangkan pikiran.",
+      },
+      {
+        name: "Stagnasi Qi Hati (Sumbatan Aliran Emosi)",
+        pct: results.imbalStagnation,
+        desc: "Aliran energi terhambat akibat beban emosional/stres, dada terasa sesak, sering mendesah, kembung.",
+        dietDianjurkan:
+          "Teh bunga mawar (Mei Gui Hua), kulit jeruk mandarin (Chen Pi), daun mint, lobak putih.",
+        dietDihindari: "Makanan berlemak berat, alkohol, makanan olahan cepat saji.",
+        lifestyle:
+          "Ekspresikan emosi secara sehat, jalan-jalan di alam hijau, relaksasi pernapasan dalam.",
+        acupressure: "Taichong (LR3)",
+        acupressureLoc: "Lekukan antara pangkal ibu jari kaki dan jari telunjuk kaki.",
+        acupressureFunc:
+          "Membuka sumbatan Qi Hati, meredakan ketegangan stres, dan menstabilkan emosi.",
+      },
+      {
+        name: "Kelembapan & Dahak (Dampness-Phlegm)",
+        pct: Math.max(results.imbalDamp, results.imbalPhlegm),
+        desc: "Penumpukan cairan keruh dan dahak metabolik, badan terasa berat, kepala pening seperti diikat, BAB lengket.",
+        dietDianjurkan:
+          "Barley (Jali-jali), kacang merah (Chi Xiao Dou), labu kuning, bawang putih, temulawak.",
+        dietDihindari:
+          "Gula pasir, susu olahan/keju berlebih, makanan berminyak tinggi, tepung-tepungan.",
+        lifestyle:
+          "Olahraga teratur hingga berkeringat ringan, jaga sirkulasi udara ruangan tetap kering.",
+        acupressure: "Fenglong (ST40)",
+        acupressureLoc: "Pertengahan antara lutut luar dan mata kaki luar.",
+        acupressureFunc: "Titik utama TCM untuk melarutkan dahak dan membuang kelembapan internal.",
+      },
+    ];
+
+    list.sort((a, b) => b.pct - a.pct);
+    return list[0];
+  };
+
+  const dominant = getDominantConstitution();
+
+  const requestAiAnalysis = useCallback(
+    async (customAnswers?: Record<string, number>, customProfile?: Record<string, unknown>) => {
+      setIsLoadingAi(true);
+      try {
+        const answersToUse = customAnswers || jawaban;
+        const currentProfile = customProfile || {
+          name: nama,
+          age: parseInt(usia) || 25,
+          gender: kelamin === "L" ? "Laki-laki" : "Perempuan",
+          height: parseInt(tinggi) || 165,
+          weight: parseInt(berat) || 60,
+          complaints: keluhan,
+          tonguePhoto,
+        };
+
+        const res = await fetch("/api/screening/generate-ai-analysis", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            answers: answersToUse,
+            questions,
+            patientProfile: currentProfile,
+            basicResults: calculateTcmResult(),
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setAiReport(data);
+        }
+      } catch (err) {
+        console.error("Gagal mendapatkan analisa AI:", err);
+      } finally {
+        setIsLoadingAi(false);
+      }
+    },
+    [jawaban, questions, nama, usia, kelamin, tinggi, berat, keluhan, tonguePhoto],
+  );
+
+  // Auto trigger AI analysis when reaching result step
+  useEffect(() => {
+    if (step === "result" && !aiReport && !isLoadingAi && Object.keys(jawaban).length > 0) {
+      void requestAiAnalysis();
+    }
+  }, [step, aiReport, isLoadingAi, jawaban, requestAiAnalysis]);
 
   const getSyndromeConfidence = (syndrome: { title: string; keywords: string[] }) => {
     const totalQuestions = questions.length || 1;
@@ -764,9 +916,18 @@ function Skrining() {
       whatsappSettings.whatsappMessageTemplate ||
       "Halo [nama],\n\nBerikut adalah hasil skrining TCM Anda. Silakan klik link berikut untuk melihat detail analisis holistik Anda:\n\n[link]\n\nTerima kasih,\nRumah Terapy Ikhtiar Sehat";
 
-    const params = new URLSearchParams(window.location.search);
-    const sharedUserId = params.get("userId") || user?.id || "";
-    const reportUrl = `${window.location.origin}/skrining?userId=${sharedUserId}`;
+    const resultPayload = {
+      nama,
+      usia,
+      kelamin,
+      tinggi,
+      berat,
+      keluhan,
+      tonguePhoto,
+      answers: jawaban,
+    };
+    const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
+    const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}`;
 
     template = template.replace("[nama]", nama || "Pasien");
     template = template.replace("[link]", reportUrl);
@@ -812,7 +973,7 @@ function Skrining() {
         <div className="mx-auto flex max-w-7xl h-16 items-center justify-between px-4 sm:px-6">
           <Link to="/" className="flex items-center gap-2.5">
             <img
-              src="/logon.png"
+              src="/logo.png"
               alt="Logo Rumah Terapy"
               className="h-10 w-auto rounded-lg bg-white p-0.5 border border-neutral-200"
             />
@@ -1223,12 +1384,25 @@ function Skrining() {
                     </span>
                   </summary>
                   <div className="rounded-lg bg-white p-3 border border-emerald-100/40 text-xs text-neutral-700 font-mono whitespace-pre-wrap leading-relaxed shadow-xs">
-                    {whatsappSettings.whatsappMessageTemplate
-                      ?.replace("[nama]", nama || "Pasien")
-                      ?.replace(
-                        "[link]",
-                        `${window.location.origin}/skrining?userId=${new URLSearchParams(window.location.search).get("userId") || user?.id || ""}`,
-                      )}
+                    {(() => {
+                      const resultPayload = {
+                        nama,
+                        usia,
+                        kelamin,
+                        tinggi,
+                        berat,
+                        keluhan,
+                        tonguePhoto,
+                        answers: jawaban,
+                      };
+                      const encodedPayload = btoa(
+                        encodeURIComponent(JSON.stringify(resultPayload)),
+                      );
+                      const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}`;
+                      return whatsappSettings.whatsappMessageTemplate
+                        ?.replace("[nama]", nama || "Pasien")
+                        ?.replace("[link]", reportUrl);
+                    })()}
                   </div>
                 </details>
               </div>
@@ -1241,7 +1415,7 @@ function Skrining() {
             <div className="flex flex-col items-center justify-between border-b pb-8 sm:flex-row gap-6">
               <div className="flex items-center gap-4">
                 <img
-                  src="/logon.png"
+                  src="/logo.png"
                   alt="Logo Rumah Terapy"
                   className="h-20 w-auto rounded-xl border p-1"
                 />
@@ -1386,561 +1560,194 @@ function Skrining() {
               </div>
             </div>
 
-            {/* HOLISTIC CONCLUSION TEXT */}
-            <div className="mt-8 rounded-xl border-l-4 border-primary bg-primary/5 p-6">
-              <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary">
-                <Info className="h-4 w-4" />
-                Kesimpulan Analisa Holistik
-              </span>
-              <p className="mt-3 text-sm text-neutral-800 leading-relaxed">
-                Berdasarkan hasil analisa menyeluruh dari gejala yang dilaporkan, kondisi vitalitas
-                pasien saat ini berada dalam rentang{" "}
-                <span className="font-bold text-primary">
-                  {results.balanceScore >= 80
-                    ? "Sangat Seimbang"
-                    : results.balanceScore >= 50
-                      ? "Ketidakseimbangan Ringan-Sedang"
-                      : "Ketidakseimbangan Sangat Dominan"}
-                </span>{" "}
-                (Balance Score: <strong className="text-primary">{results.balanceScore}/100</strong>
-                ).
-              </p>
-              <p className="mt-3 text-sm text-neutral-800 leading-relaxed">
-                Pola patologi pasien mengarah pada sindrom{" "}
-                <strong className="text-neutral-900 leading-normal">
-                  {getActiveSyndromesString()}
-                </strong>
-                .
-              </p>
-              <p className="mt-3 text-sm text-neutral-800 leading-relaxed">
-                Hal ini paling kuat bermanifestasi pada keluhan pasien berupa:{" "}
-                <strong>{getKeluhanUtamaManifestasi()}</strong>.
-              </p>
-              <p className="mt-3 text-sm text-neutral-800 leading-relaxed">
-                Dari segi fungsional organ (Zang Fu), organ{" "}
-                <strong className="text-primary">{getTop3OrgansString()}</strong> menunjukkan
-                tingkat ketidakseimbangan tertinggi yang perlu diperhatikan, yang kemungkinan besar
-                menjadi akar/pusat (root cause) dari keluhan fisik dan emosional pasien saat ini.
-              </p>
-              <p className="mt-3 text-sm text-neutral-800 leading-relaxed">
-                Energi pertahanan tubuh (Wei Qi) terpantau{" "}
-                <strong className="text-neutral-950">
-                  {results.weiQi >= 75 ? "Kuat" : results.weiQi >= 45 ? "Sedang" : "Lemah"} (
-                  {results.weiQi}%)
-                </strong>
-                , menyebabkan tubuh cukup rentan terhadap serangan cuaca atau penyakit eksternal.
-                Saat ini, perhatian khusus harus difokuskan untuk membuang patogen{" "}
-                <strong className="text-primary">Angin, Dingin, Panas, Lembap, dan Kering</strong>{" "}
-                yang diam-diam mencoba mempengaruhi sistem tubuh pasien.
-              </p>
-              <p className="mt-3 text-sm text-neutral-800 leading-relaxed">
-                Secara konstitusi dasar, tubuh pasien saat ini mengalami kekurangan cadangan energi
-                (Qi) dan nutrisi darah (Blood) secara bersamaan, sehingga tubuh kehilangan tenaga
-                untuk pemulihan alami.
-              </p>
-              <p className="mt-3 text-sm text-neutral-800 leading-relaxed">
-                Dari sisi psiko-emosional, ketegangan pada sistem Liver (Hati) dan hambatan
-                sirkulasi energi (Qi) menunjukkan adanya akumulasi tekanan pikiran atau stres
-                terpendam yang sangat mempengaruhi keluhan fisik pasien saat ini.
-              </p>
-              <p className="mt-3 text-sm text-neutral-800 leading-relaxed">
-                Pola ketidakseimbangan ini kemungkinan besar dipicu atau diperberat oleh faktor gaya
-                hidup seperti:{" "}
-                <strong>
-                  Stres Emosional / Pikiran Berlebih, Konsumsi Berlebih Makanan Manis/Berminyak,
-                  Paparan Suhu Dingin (AC) / Makanan Dingin, Makanan Pedas / Kurang Tidur, Kelelahan
-                  Fisik / Kurang Istirahat, Sering Begadang / Kurang Minum Cairan / Kelelahan
-                  Kronis, Usia / Penyakit Kronis / Terlalu Sering Konsumsi Minuman Es, Diet Kurang
-                  Nutrisi / Overthinking (Terlalu Banyak Berpikir), Kurang Olahraga / Cidera Lama /
-                  Emosi Tertekan Menahun, Pola Makan Sangat Tidak Sehat / Gangguan Pencernaan Lama
-                </strong>
-                .
-              </p>
-              <p className="mt-3 text-sm text-neutral-800 leading-relaxed">
-                Secara holistik, prioritas utama dalam pemberian terapi (baik akupunktur, herbal,
-                maupun gaya hidup) harus difokuskan pada:{" "}
-                <strong className="text-primary">{getPrimaryTherapeuticPriority()}</strong>.
-              </p>
-            </div>
+            {/* HASIL PENILAIAN SKRENING & RIWAYAT PENGISIAN SOAL */}
+            {(() => {
+              const totalScore = Object.values(jawaban).reduce((acc, val) => acc + (val || 0), 0);
+              const maxPossibleScore = (questions.length || 1) * 3;
+              const pct = maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : 0;
+              const riskInfo =
+                pct < 30
+                  ? {
+                      level: "Rendah",
+                      badgeClass: "bg-emerald-100 text-emerald-800 border-emerald-300",
+                      advice:
+                        "Kondisi vitalitas tubuh Anda secara umum berada dalam keseimbangan yang baik. Tetap pertahankan pola hidup sehat dan pola makan seimbang.",
+                    }
+                  : pct < 65
+                    ? {
+                        level: "Sedang",
+                        badgeClass: "bg-amber-100 text-amber-800 border-amber-300",
+                        advice:
+                          "Terdapat beberapa indikasi ketidakseimbangan energi/qi. Disarankan melakukan konsultasi awal untuk menentukan terapi pendukung yang tepat.",
+                      }
+                    : {
+                        level: "Tinggi",
+                        badgeClass: "bg-rose-100 text-rose-800 border-rose-300",
+                        advice:
+                          "Banyak tanda ketidakseimbangan signifikan terdeteksi. Kami menyarankan Anda menjadwalkan konsultasi mendalam dengan praktisi kami agar dapat ditangani secara dini.",
+                      };
 
-            {/* HIGH PRIORITY WARNING BOX */}
-            {listCriticalImbalances().length > 0 && (
-              <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-6 text-red-900">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
-                  <span className="font-display text-base font-bold text-red-800">
-                    Peringatan Prioritas Tinggi!
-                  </span>
-                </div>
-                <p className="mt-2 text-sm leading-relaxed">
-                  Profil ketidakseimbangan Anda menunjukkan nilai yang cukup tinggi (≥ 60%) pada:
-                </p>
-                <p className="mt-2 text-xs font-bold leading-relaxed tracking-wide text-red-700">
-                  • {listCriticalImbalances().join(", ")}
-                </p>
-                <p className="mt-4 text-xs font-semibold text-red-700">
-                  Kami sangat merekomendasikan Anda untuk segera menjadwalkan konsultasi dengan
-                  terapis TCM kami untuk mencegah keluhan berkembang menjadi masalah kronis.
-                </p>
-              </div>
-            )}
+              const historyPerPage = 5;
+              const totalHistoryPages = Math.ceil((questions.length || 1) / historyPerPage) || 1;
+              const paginatedHistoryQuestions = questions.slice(
+                (historyQuestionsPage - 1) * historyPerPage,
+                historyQuestionsPage * historyPerPage,
+              );
 
-            {/* BODY CONDITIONS GRID */}
-            <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-3">
-              {/* CONDITION STATUS BANNER */}
-              <div className="rounded-xl border border-neutral-200 p-6 text-center shadow-xs flex flex-col justify-between">
-                <div>
-                  <span className="block text-xs font-bold uppercase tracking-wider text-neutral-400">
-                    Kondisi Tubuh
-                  </span>
-                  <span className="mt-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-2xl">
-                    {results.balanceScore >= 80 ? "🟢" : results.balanceScore >= 50 ? "🟡" : "🔴"}
-                  </span>
-                  <h4 className="mt-3 font-display text-lg font-bold text-neutral-900">
-                    {results.balanceScore >= 80
-                      ? "Kondisi Sangat Seimbang"
-                      : results.balanceScore >= 50
-                        ? "Ketidakseimbangan Ringan"
-                        : "Ketidakseimbangan Sangat Dominan"}
-                  </h4>
-                </div>
-                <p className="mt-2 text-xs text-neutral-500 leading-relaxed">
-                  Profil menunjukkan beberapa pola ketidakseimbangan yang perlu diwaspadai menurut
-                  konsep TCM. Disarankan berkonsultasi dengan praktisi TCM untuk evaluasi lebih
-                  lanjut.
-                </p>
-              </div>
-
-              {/* BALANCE SCORE CIRCLE */}
-              <div className="flex flex-col items-center justify-center rounded-xl border border-neutral-200 p-6 text-center shadow-xs">
-                <span className="block text-xs font-bold uppercase tracking-wider text-neutral-400">
-                  Balance Score
-                </span>
-                <div
-                  className={`relative mt-4 flex h-24 w-24 items-center justify-center rounded-full border-4 bg-neutral-50 ${
-                    results.balanceScore >= 80
-                      ? "border-emerald-500 bg-emerald-50 text-emerald-600"
-                      : results.balanceScore >= 50
-                        ? "border-yellow-500 bg-yellow-50 text-yellow-600"
-                        : "border-red-500 bg-red-50 text-red-600"
-                  }`}
-                >
-                  <span className="font-display text-3xl font-black">{results.balanceScore}</span>
-                  <span
-                    className={`absolute -bottom-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase text-white ${
-                      results.balanceScore >= 80
-                        ? "bg-emerald-600"
-                        : results.balanceScore >= 50
-                          ? "bg-yellow-600"
-                          : "bg-red-600"
-                    }`}
-                  >
-                    SCORE
-                  </span>
-                </div>
-                <p className="mt-3 text-xs text-neutral-500 max-w-[180px]">
-                  Skor keseimbangan energi tubuh keseluruhan (0-100).
-                </p>
-              </div>
-
-              {/* DOMINANT CONSTITUTION */}
-              <div className="rounded-xl border border-neutral-200 p-6 text-center shadow-xs flex flex-col justify-between">
-                <div>
-                  <span className="block text-xs font-bold uppercase tracking-wider text-neutral-400">
-                    Konstitusi Dominan
-                  </span>
-                  <span className="mt-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-2xl text-primary">
-                    🎯
-                  </span>
-                  <h4 className="mt-3 font-display text-base font-bold text-primary">
-                    {dominant.name}
-                  </h4>
-                  <p className="mt-1 text-sm font-bold text-neutral-800">
-                    {dominant.pct}% Terdeteksi
-                  </p>
-                </div>
-                <p className="mt-2 text-xs text-neutral-500 leading-relaxed">{dominant.desc}</p>
-              </div>
-            </div>
-
-            <div className="print-break" />
-
-            {/* BASE IMBALANCE PROFILES - METERS */}
-            <div className="mt-10 border-t pt-8">
-              <h3 className="font-display text-lg font-bold text-neutral-900">
-                Profil Ketidakseimbangan Dasar
-              </h3>
-              <p className="text-xs text-neutral-500 mt-0.5">
-                Semakin tinggi nilai, semakin besar kecenderungan ketidakseimbangan tersebut aktif
-                di tubuh Anda.
-              </p>
-
-              <div className="mt-6 grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-                {[
-                  ["Kekurangan Energi (Qi)", results.imbalEnergy],
-                  ["Kekurangan Darah (Blood)", results.imbalBlood],
-                  ["Kekurangan Yin", results.imbalYin],
-                  ["Kekurangan Yang", results.imbalYang],
-                  ["Stagnasi Energi (Qi)", results.imbalStagnation],
-                  ["Stasis Darah", results.imbalStasis],
-                  ["Kelembapan Berlebih (Dampness)", results.imbalDamp],
-                  ["Dahak Internal (Phlegm)", results.imbalPhlegm],
-                  ["Panas Internal (Heat)", results.imbalHeat],
-                  ["Dingin Internal (Cold)", results.imbalCold],
-                ].map(([label, val]) => (
-                  <div key={label as string} className="space-y-1">
-                    <div className="flex justify-between text-xs font-bold text-neutral-700">
-                      <span>{label as string}</span>
-                      <span className="text-primary">{val as number}%</span>
+              return (
+                <div className="mt-8 rounded-2xl border border-neutral-200 bg-white p-6 shadow-xs sm:p-8">
+                  {/* Summary Assessment Header */}
+                  <div className="text-center space-y-3 pb-6 border-b border-neutral-100">
+                    <div className="flex justify-center">
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-bold border ${riskInfo.badgeClass}`}
+                      >
+                        <AlertCircle className="h-3.5 w-3.5" />
+                        Tingkat Risiko: {riskInfo.level}
+                      </span>
                     </div>
-                    <div className="h-2 w-full rounded-full bg-neutral-100">
-                      <div
-                        className="h-2 rounded-full bg-primary animate-pulse"
-                        style={{ width: `${val}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* ORGAN IMBALANCES - METERS */}
-            <div className="mt-10 border-t pt-8">
-              <h3 className="font-display text-lg font-bold text-neutral-900">
-                Profil Ketidakseimbangan Organ
-              </h3>
-              <p className="text-xs text-neutral-500 mt-0.5">
-                Skor menunjukkan kecenderungan ketidakseimbangan fungsi organ menurut konsep TCM.
-              </p>
-
-              <div className="mt-6 grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-                {Object.entries(results.organImbalances).map(([name, val]) => (
-                  <div key={name} className="space-y-1">
-                    <div className="flex justify-between text-xs font-bold text-neutral-700">
+                    <h3 className="font-display text-xl font-bold text-neutral-900 sm:text-2xl">
+                      Hasil Penilaian Skrening Mandiri Berhasil Disimpan
+                    </h3>
+                    <p className="mx-auto max-w-xl text-xs sm:text-sm text-neutral-600 leading-relaxed font-medium">
+                      {riskInfo.advice}
+                    </p>
+                    <div className="inline-flex items-center gap-2 rounded-lg bg-neutral-50 px-4 py-2 text-xs font-semibold text-neutral-700 border border-neutral-200">
                       <span>
-                        {name === "Paru"
-                          ? "Paru-paru"
-                          : name === "KandungEmpedu"
-                            ? "Kandung Empedu"
-                            : name === "UsusBesar"
-                              ? "Usus Besar"
-                              : name === "UsusKecil"
-                                ? "Usus Kecil"
-                                : name === "KandungKemih"
-                                  ? "Kandung Kemih"
-                                  : name}
+                        Total Skor: <strong className="text-primary text-sm">{totalScore}</strong>{" "}
+                        dari maksimum <strong>{maxPossibleScore}</strong> ({questions.length} soal)
                       </span>
-                      <span className="text-primary">{val}%</span>
-                    </div>
-                    <div className="h-2 w-full rounded-full bg-neutral-100">
-                      <div className="h-2 rounded-full bg-primary" style={{ width: `${val}%` }} />
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
 
-            {/* DIET & LIFESTYLE RECOMMENDATIONS */}
-            <div className="mt-10 border-t pt-8 grid grid-cols-1 gap-6 sm:grid-cols-2">
-              <div className="rounded-xl border border-neutral-200 p-6 bg-emerald-50/20">
-                <h4 className="font-display text-base font-bold text-emerald-800 flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-emerald-600" />
-                  Rekomendasi Diet Mandiri
-                </h4>
-                <div className="mt-4 space-y-4 text-xs">
-                  <div>
-                    <span className="font-bold text-emerald-900 uppercase tracking-wider block">
-                      Dianjurkan:
-                    </span>
-                    <p className="mt-1 text-neutral-700 leading-relaxed font-medium">
-                      {dominant.dietDianjurkan}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="font-bold text-red-800 uppercase tracking-wider block">
-                      Dihindari:
-                    </span>
-                    <p className="mt-1 text-neutral-700 leading-relaxed">
-                      {dominant.dietDihindari}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-neutral-200 p-6 bg-neutral-50">
-                <h4 className="font-display text-base font-bold text-neutral-800 flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-primary" />
-                  Gaya Hidup & Terapi Mandiri
-                </h4>
-                <div className="mt-4 space-y-4 text-xs">
-                  <div>
-                    <span className="font-bold text-neutral-700 uppercase tracking-wider block">
-                      Anjuran Aktivitas:
-                    </span>
-                    <p className="mt-1 text-neutral-600 leading-relaxed">{dominant.lifestyle}</p>
-                  </div>
-                  <div>
-                    <span className="font-bold text-primary uppercase tracking-wider block">
-                      Titik Akupresur Mandiri:
-                    </span>
-                    <p className="mt-1 font-bold text-neutral-900 text-sm">
-                      {dominant.acupressure}
-                    </p>
-                    <p className="mt-0.5 text-neutral-600 leading-relaxed">
-                      <strong>Lokasi:</strong> {dominant.acupressureLoc}
-                    </p>
-                    <p className="mt-0.5 text-neutral-600 leading-relaxed">
-                      <strong>Manfaat:</strong> {dominant.acupressureFunc}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="print-break" />
-
-            {/* TCM COMBINATION PATTERNS LIST (SCROLLABLE ACCORDION STYLE) */}
-            <div className="mt-10 border-t pt-8">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-display text-lg font-bold text-neutral-900">
-                    Pola Ketidakseimbangan TCM
-                  </h3>
-                  <p className="text-xs text-neutral-500 mt-0.5">
-                    Menunjukkan tingkat keyakinan sistem terhadap pola sindrom yang berhasil
-                    diidentifikasi berdasarkan kuesioner.
-                  </p>
-                </div>
-                <div className="text-right">
-                  <span className="block text-[10px] font-bold uppercase tracking-wider text-neutral-400">
-                    Confidence Avg
-                  </span>
-                  <span className="block font-display text-sm font-black text-primary">
-                    {Math.round(results.balanceScore < 50 ? 88 : 75)}% Match
-                  </span>
-                </div>
-              </div>
-
-              {/* High-Fidelity Syndrome Mapping Cards */}
-              <div className="mt-6 max-h-[400px] overflow-y-auto border border-neutral-200 rounded-xl divide-y divide-neutral-200 bg-neutral-50/30 no-scrollbar">
-                {tcmSyndromes
-                  .map((s) => ({ ...s, confidence: getSyndromeConfidence(s) }))
-                  .sort((a, b) => b.confidence - a.confidence)
-                  .map((s, idx) => (
-                    <div key={s.id} className="p-4 hover:bg-neutral-50 transition-colors">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <span className="inline-block rounded-md bg-neutral-200/60 px-1.5 py-0.5 text-[9px] font-bold text-neutral-600 uppercase">
-                            {s.type} #{idx + 1}
-                          </span>
-                          <h4 className="mt-1 text-sm font-bold text-neutral-900 leading-tight">
-                            {s.title}
-                          </h4>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <span
-                            className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                              s.confidence >= 75
-                                ? "bg-emerald-100 text-emerald-800"
-                                : "bg-neutral-100 text-neutral-600"
-                            }`}
-                          >
-                            {s.confidence}% Match
-                          </span>
-                        </div>
+                  {/* Riwayat Pengisian Soal */}
+                  <div className="mt-6 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <h4 className="font-display text-base font-bold text-neutral-900 flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-primary" />
+                          Riwayat Pengisian & Detail Jawaban Kuesioner
+                        </h4>
+                        <p className="text-xs text-neutral-500 mt-0.5">
+                          Rincian setiap pertanyaan yang dijawab oleh pasien beserta pilihan bobot
+                          skornya:
+                        </p>
                       </div>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {s.keywords.map((kw) => (
-                          <span
-                            key={kw}
-                            className="rounded-full bg-white px-2.5 py-0.5 text-[10px] font-medium text-neutral-500 border border-neutral-200"
-                          >
-                            {kw}
-                          </span>
-                        ))}
-                      </div>
+                      <span className="text-xs font-semibold text-neutral-500 bg-neutral-100 px-2.5 py-1 rounded-full self-start sm:self-auto">
+                        {Object.keys(jawaban).length} dari {questions.length} Soal Terisi
+                      </span>
                     </div>
-                  ))}
-              </div>
-            </div>
 
-            {/* WEI QI & PATHOGENS */}
-            <div className="mt-10 border-t pt-8 grid grid-cols-1 gap-6 sm:grid-cols-2">
-              <div>
-                <h3 className="font-display text-lg font-bold text-neutral-900">
-                  Wei Qi (Energi Pelindung)
-                </h3>
-                <div className="mt-4 rounded-xl border border-neutral-200 p-5 bg-yellow-50/30">
-                  <div className="flex items-center gap-2 text-yellow-800">
-                    <AlertCircle className="h-5 w-5 shrink-0" />
-                    <span className="font-display font-bold text-sm">
-                      {results.weiQi >= 75 ? "Kuat" : results.weiQi >= 45 ? "Sedang" : "Lemah"} (
-                      {results.weiQi}%)
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs text-neutral-700 leading-relaxed">
-                    Sistem pertahanan luar (Wei Qi) Anda sedang berada dalam kondisi{" "}
-                    {results.weiQi >= 75
-                      ? "prima untuk menangkal patogen luar."
-                      : results.weiQi >= 45
-                        ? "sedang, disarankan menjaga asupan makanan hangat dan tidak overwork."
-                        : "lemah. Anda mungkin mudah masuk angin, cepat lelah, atau rentan terhadap serangan cuaca eksternal."}
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="font-display text-lg font-bold text-neutral-900">
-                  Kerentanan Patogen Luar
-                </h3>
-                <div className="mt-4 space-y-3">
-                  {[
-                    [
-                      "Angin (Wind)",
-                      Math.max(20, Math.min(100, Math.round(100 - results.weiQi * 0.95))),
-                    ],
-                    ["Dingin (Cold)", results.imbalCold],
-                    ["Panas (Heat)", results.imbalHeat],
-                    ["Lembap (Damp)", results.imbalDamp],
-                    ["Kering (Dry)", Math.max(30, Math.min(100, results.imbalYin))],
-                  ].map(([patogen, val]) => (
-                    <div
-                      key={patogen as string}
-                      className="flex items-center justify-between text-xs font-medium"
-                    >
-                      <span className="text-neutral-700 font-semibold">{patogen as string}</span>
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 w-24 rounded-full bg-neutral-100">
+                    {/* Question Items */}
+                    <div className="space-y-3 pt-2">
+                      {paginatedHistoryQuestions.map((q, idx) => {
+                        const globalIdx = (historyQuestionsPage - 1) * historyPerPage + idx;
+                        const answerVal = jawaban[q.id];
+                        const answerOptions = [
+                          { label: "Tidak pernah", score: 0 },
+                          { label: "Kadang-kadang", score: 1 },
+                          { label: "Sering", score: 2 },
+                          { label: "Selalu", score: 3 },
+                        ];
+                        return (
                           <div
-                            className={`h-1.5 rounded-full ${
-                              val >= 75
-                                ? "bg-red-500"
-                                : val >= 50
-                                  ? "bg-yellow-500"
-                                  : "bg-emerald-500"
-                            }`}
-                            style={{ width: `${val}%` }}
-                          />
+                            key={q.id}
+                            className="rounded-xl border border-neutral-200 bg-neutral-50/50 p-4 transition-all hover:bg-neutral-50"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="space-y-1 flex-1">
+                                <span className="inline-block rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                                  Soal #{globalIdx + 1}
+                                </span>
+                                <p className="text-xs sm:text-sm font-semibold text-neutral-800 leading-snug">
+                                  {q.questionText}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="mt-3 grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap">
+                              {answerOptions.map((opt) => {
+                                const isSelected = answerVal === opt.score;
+                                return (
+                                  <span
+                                    key={opt.score}
+                                    className={`inline-flex items-center justify-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-all ${
+                                      isSelected
+                                        ? "bg-primary text-white font-bold shadow-xs border border-primary"
+                                        : "bg-white text-neutral-400 border border-neutral-200 opacity-60"
+                                    }`}
+                                  >
+                                    {isSelected && <CheckCircle className="h-3 w-3" />}
+                                    <span>{opt.label}</span>
+                                    <span className="text-[9px] opacity-80">({opt.score} pt)</span>
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Pagination Controls */}
+                    {questions.length > historyPerPage && (
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-neutral-200 pt-4 text-xs text-neutral-500 no-print">
+                        <div>
+                          Menampilkan soal{" "}
+                          <strong className="text-neutral-900">
+                            {(historyQuestionsPage - 1) * historyPerPage + 1}
+                          </strong>{" "}
+                          -{" "}
+                          <strong className="text-neutral-900">
+                            {Math.min(historyQuestionsPage * historyPerPage, questions.length)}
+                          </strong>{" "}
+                          dari <strong className="text-neutral-900">{questions.length}</strong> soal
                         </div>
-                        <span className="text-neutral-800 font-bold w-10 text-right">
-                          {val as number}%
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setHistoryQuestionsPage((p) => Math.max(1, p - 1))}
+                            disabled={historyQuestionsPage <= 1}
+                            className="flex items-center gap-1 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            <ChevronLeft className="h-3.5 w-3.5" />
+                            Sebelumnya
+                          </button>
+                          <span className="px-2 font-bold text-neutral-800">
+                            {historyQuestionsPage} / {totalHistoryPages}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setHistoryQuestionsPage((p) => Math.min(totalHistoryPages, p + 1))
+                            }
+                            disabled={historyQuestionsPage >= totalHistoryPages}
+                            className="flex items-center gap-1 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            Selanjutnya
+                            <ChevronRight className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )}
+                  </div>
                 </div>
-              </div>
-            </div>
+              );
+            })()}
 
-            {/* PRECIPITATING FACTORS */}
-            <div className="mt-10 border-t pt-8">
-              <h3 className="font-display text-lg font-bold text-neutral-900">
-                Kemungkinan Faktor Pencetus
-              </h3>
-              <p className="text-xs text-neutral-500 mt-0.5">
-                Gaya hidup dan faktor eksternal yang memperberat pola ketidakseimbangan tubuh saat
-                ini.
-              </p>
-              <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 text-xs font-medium text-neutral-700">
-                {[
-                  "Stres Emosional / Pikiran Berlebih",
-                  "Konsumsi Berlebih Makanan Manis/Berminyak",
-                  "Paparan Suhu Dingin (AC) / Makanan Dingin",
-                  "Makanan Pedas / Kurang Tidur",
-                  "Kelelahan Fisik / Kurang Istirahat",
-                  "Sering Begadang / Kurang Minum Cairan",
-                  "Kelelahan Kronis / Kurang Olahraga",
-                  "Diet Kurang Nutrisi / Overthinking (Berpikir Berlebih)",
-                  "Emosi Tertekan Menahun",
-                  "Pola Makan Tidak Sehat / Gangguan Pencernaan Lama",
-                ].map((item) => (
-                  <div
-                    key={item}
-                    className="flex items-center gap-2 rounded-lg border border-neutral-200 p-2 bg-neutral-50"
-                  >
-                    <span className="text-primary font-bold">•</span>
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* TOP 3 ORGANS HIGHEST ATTENTION */}
-            <div className="mt-10 border-t pt-8">
-              <h3 className="font-display text-lg font-bold text-neutral-900">
-                Top 3 Organ yang Memerlukan Perhatian
-              </h3>
-              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-                {getTop3OrgansList().map((org, idx) => (
-                  <div
-                    key={org.name}
-                    className="rounded-xl border border-neutral-200 p-4 bg-white shadow-xs flex flex-col justify-between h-32"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
-                        #{idx + 1} Prioritas Organ
-                      </span>
-                      <span className="text-xs font-bold text-primary">{org.val}</span>
-                    </div>
-                    <h4 className="mt-2 font-display text-base font-bold text-neutral-900">
-                      {org.name}
-                    </h4>
-                    <p className="mt-1 text-xs text-neutral-500 leading-relaxed">{org.desc}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* GEJALA PALING BERPENGARUH */}
-            <div className="mt-10 border-t pt-8">
-              <h3 className="font-display text-lg font-bold text-neutral-900">
-                Gejala yang Paling Berpengaruh
-              </h3>
-              <p className="text-xs text-neutral-500 mt-0.5">
-                Gejala-gejala dari kuesioner yang Anda laporkan paling kuat atau sering dirasakan.
-              </p>
-              <div className="mt-4 space-y-2 text-xs text-neutral-700 leading-relaxed">
-                {getMostInfluentialSymptoms().map((gejala) => (
-                  <div
-                    key={gejala}
-                    className="flex items-start gap-2.5 rounded-lg border border-neutral-200 p-3 bg-neutral-50/50"
-                  >
-                    <span className="text-primary text-base font-bold leading-none">•</span>
-                    <span>{gejala}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* PRIORITAS PERBAIKAN */}
-            <div className="mt-10 border-t pt-8">
-              <h3 className="font-display text-lg font-bold text-neutral-900">
-                Prioritas Perbaikan Kondisi Tubuh
-              </h3>
-              <div className="mt-4 space-y-2 text-xs text-neutral-700 leading-relaxed">
-                {[
-                  "Menghangatkan Yang Ginjal dan Limpa (wen shen jian pi), serta melarutkan kelembapan (hua shi).",
-                  "Mengatur Qi Hati (shu gan li qi), menguatkan Qi Limpa (jian pi yi qi), dan menghilangkan lembap (hua shi).",
-                  "Menguatkan Qi Limpa dan Paru (jian pi yi fei), serta mengurai dahak (hua tan).",
-                  "Menutrisi Yin Ginjal (zi yin) dan menurunkan Api Jantung (jiang huo).",
-                  "Menenangkan Hati (ping gan), melancarkan Qi (li qi), dan membersihkan Api Hati (qing gan huo).",
-                ].map((prioritas) => (
-                  <div
-                    key={prioritas}
-                    className={`flex items-start gap-2.5 rounded-lg border p-3 transition-colors ${
-                      prioritas
-                        .toLowerCase()
-                        .includes(getPrimaryTherapeuticPriority().split(",")[0].toLowerCase())
-                        ? "border-primary bg-primary/5 font-semibold text-neutral-900"
-                        : "border-neutral-200 text-neutral-600"
-                    }`}
-                  >
-                    <span className="text-primary text-base font-bold leading-none">•</span>
-                    <span>{prioritas}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* AI-POWERED TCM & HERBAL REPORT (INDONESIA & CHINA) */}
+            <TcmHerbalReport
+              aiReport={aiReport}
+              isLoadingAi={isLoadingAi}
+              onRegenerateAi={() => requestAiAnalysis()}
+              results={results}
+              dominant={dominant}
+              criticalImbalances={listCriticalImbalances()}
+              activeSyndromesString={getActiveSyndromesString()}
+              manifestasiKeluhan={getKeluhanUtamaManifestasi()}
+              top3OrgansString={getTop3OrgansString()}
+              primaryTherapeuticPriority={getPrimaryTherapeuticPriority()}
+              top3OrgansList={getTop3OrgansList()}
+            />
 
             {/* DISCLAIMER TEXT */}
             <div className="mt-10 border-t pt-8 text-[11px] text-neutral-500 leading-relaxed bg-neutral-50 p-5 rounded-xl border border-neutral-200">
