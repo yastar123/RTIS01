@@ -1,12 +1,16 @@
 import { createFileRoute, Link } from "@/lib/route";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, useRef, type FormEvent } from "react";
 import { useLocation } from "react-router-dom";
 import {
   Activity,
   AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
   BookOpen,
   Calendar,
   CalendarDays,
+  Camera,
+  CheckCircle,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -15,12 +19,15 @@ import {
   Clock,
   ExternalLink,
   Eye,
+  FileText,
   Filter,
   Globe,
   History,
+  Image as ImageIcon,
   LayoutDashboard,
   Loader2,
   LogOut,
+  MapPin,
   Menu,
   PanelLeft,
   PanelLeftClose,
@@ -28,21 +35,21 @@ import {
   Phone,
   PhoneCall,
   Plus,
+  Printer,
   RefreshCw,
   Save,
   Search,
   Settings,
   ShieldCheck,
+  Sparkles,
   Stethoscope,
   Trash2,
+  Upload,
   User,
   UserCircle,
   Users,
-  MapPin,
+  Video,
   X,
-  Sparkles,
-  FileText,
-  Printer,
 } from "lucide-react";
 import { TcmHerbalReport, type TcmAiReport } from "@/components/screening/TcmHerbalReport";
 import { calculateTcmResult, getDominantConstitution, createTcmReportHelpers } from "@/lib/tcm";
@@ -3171,9 +3178,24 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
     screeningCurrentPage * 10,
   );
 
-  // Patient answers
+  // Patient answers & multi-step flow state
   const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [screeningStep, setScreeningStep] = useState<"questions" | "detail" | "confirm">(
+    "questions",
+  );
   const [isSubmitted, setIsSubmitted] = useState(false);
+
+  // Complaints and Tongue media state
+  const [complaints, setComplaints] = useState("");
+  const [tonguePhoto, setTonguePhoto] = useState<string | null>(null);
+  const [mediaType, setMediaType] = useState<"photo" | "video">("photo");
+
+  // Camera & Gallery Upload Refs
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
 
   // Profile data and global WhatsApp settings
   const { data: profile } = useProfile();
@@ -3182,6 +3204,78 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
     whatsappMessageTemplate: string;
     whatsappFreeConsultationTemplate?: string;
   } | null>(null);
+
+  useEffect(() => {
+    if (profile) {
+      if (profile.address && !complaints) setComplaints(profile.address);
+      if (profile.tonguePhotoUrl && !tonguePhoto) setTonguePhoto(profile.tonguePhotoUrl);
+    }
+  }, [profile]);
+
+  // Webcam camera handlers
+  const startCamera = async () => {
+    setShowCameraModal(true);
+    setCameraActive(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error("Camera access denied:", err);
+      alert(
+        "Tidak dapat mengakses kamera. Pastikan izin kamera aktif atau gunakan opsi unggah foto dari galeri.",
+      );
+      setShowCameraModal(false);
+      setCameraActive(false);
+    }
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL("image/png");
+        setTonguePhoto(dataUrl);
+        setMediaType("photo");
+        stopCamera();
+      }
+    }
+  };
+
+  const stopCamera = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach((track) => track.stop());
+      videoRef.current.srcObject = null;
+    }
+    setCameraActive(false);
+    setShowCameraModal(false);
+  };
+
+  const handleGalleryUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type.startsWith("video/")) {
+      setMediaType("video");
+    } else {
+      setMediaType("photo");
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        setTonguePhoto(event.target.result as string);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => {
     fetch("/api/admin/settings")
@@ -3217,8 +3311,8 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
         gender: profile?.gender === "Perempuan" ? "Perempuan" : "Laki-laki",
         height: profile?.height || 165,
         weight: profile?.weight || 60,
-        complaints: profile?.address || "",
-        tonguePhoto: profile?.tonguePhotoUrl || "",
+        complaints: complaints || profile?.address || "",
+        tonguePhoto: tonguePhoto || profile?.tonguePhotoUrl || "",
       };
 
       const calculatedResults = calculateTcmResult(answersToUse, questions.length);
@@ -3475,8 +3569,8 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
       kelamin: profile?.gender === "Perempuan" ? "P" : "L",
       tinggi: profile?.height || 165,
       berat: profile?.weight || 60,
-      keluhan: profile?.address || "",
-      tonguePhoto: profile?.tonguePhotoUrl || "",
+      keluhan: complaints || profile?.address || "",
+      tonguePhoto: tonguePhoto || profile?.tonguePhotoUrl || "",
       answers: answers,
     };
     const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
@@ -3507,8 +3601,8 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
       kelamin: profile?.gender === "Perempuan" ? "P" : "L",
       tinggi: profile?.height || 165,
       berat: profile?.weight || 60,
-      keluhan: profile?.address || "",
-      tonguePhoto: profile?.tonguePhotoUrl || "",
+      keluhan: complaints || profile?.address || "",
+      tonguePhoto: tonguePhoto || profile?.tonguePhotoUrl || "",
       answers: answers,
     };
     const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
@@ -3541,6 +3635,8 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
           level: getResult().level,
           advice: getResult().advice,
           aiReport: aiReport ? JSON.stringify(aiReport) : null,
+          tonguePhotoUrl: tonguePhoto,
+          complaints: complaints,
         }),
       });
 
@@ -3548,8 +3644,14 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
         throw new Error("Gagal menyimpan hasil skrening.");
       }
 
+      const savedData = await res.json();
       setIsSubmitted(true);
       void fetchHistory();
+
+      // Trigger AI analysis if result ID is returned
+      if (savedData?.id) {
+        void requestAiAnalysis(answers, savedData.id);
+      }
 
       // Automatically open the WhatsApp share link for the patient in a new tab
       const waUrl = getWhatsAppUrlForPatient();
@@ -3583,7 +3685,9 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                 onClick={() => {
                   setPatientTab("new");
                   setIsSubmitted(false);
+                  setScreeningStep("questions");
                   setAnswers({});
+                  setAiReport(null);
                 }}
                 className="text-xs sm:text-sm gap-1.5"
               >
@@ -4393,82 +4497,575 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
             )
           ) : /* PATIENT / TEST VIEW (NEW ATTEMPT) */
           !isSubmitted ? (
-            <div className="space-y-4">
-              {questions.length === 0 ? (
-                <Card className="p-8 text-center bg-card">
-                  <p className="text-sm font-medium text-foreground">
-                    Belum ada pertanyaan skrening yang tersedia.
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Admin dapat menambah pertanyaan dari menu pengelolaan.
-                  </p>
-                </Card>
-              ) : (
-                <div className="space-y-4">
-                  {paginatedQuestions.map((q, idx) => {
-                    const globalIdx = (screeningCurrentPage - 1) * 10 + idx;
-                    return (
-                      <Card key={q.id} className="bg-card shadow-xs">
-                        <CardContent className="p-3.5 sm:p-5">
-                          <p className="text-xs sm:text-sm font-medium text-foreground leading-relaxed">
-                            {globalIdx + 1}. {q.questionText}
-                          </p>
-                          <div className="mt-3 grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
-                            {[
-                              ["Tidak pernah", 0],
-                              ["Kadang", 1],
-                              ["Sering", 2],
-                              ["Selalu", 3],
-                            ].map(([label, val]) => {
-                              const active = answers[q.id] === val;
-                              return (
-                                <button
-                                  key={label as string}
-                                  type="button"
-                                  onClick={() =>
-                                    setAnswers((prev) => ({ ...prev, [q.id]: val as number }))
-                                  }
-                                  className={`rounded-full px-3 py-1.5 text-center text-xs transition-colors ${
-                                    active
-                                      ? "bg-primary text-primary-foreground shadow-xs font-medium"
-                                      : "border border-border text-muted-foreground hover:border-primary hover:text-primary"
-                                  }`}
-                                >
-                                  {label as string}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-
-                  <PaginationControls
-                    currentPage={screeningCurrentPage}
-                    totalPages={totalScreeningPages}
-                    totalItems={questions.length}
-                    itemsPerPage={10}
-                    onPageChange={setScreeningCurrentPage}
-                  />
-                </div>
-              )}
-
-              {questions.length > 0 && (
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-                  <span className="text-xs text-muted-foreground">
-                    {answeredCount} dari {questions.length} pertanyaan dijawab
-                  </span>
-                  <Button
-                    disabled={!isComplete || isSaving}
-                    onClick={handleSaveScreening}
-                    className="w-full sm:w-auto gap-2"
+            <div className="space-y-6">
+              {/* Stepper Progress Header */}
+              <div className="bg-card border rounded-xl p-3 sm:p-4 shadow-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <div
+                    onClick={() => setScreeningStep("questions")}
+                    className={`flex-1 flex items-center gap-2 cursor-pointer pb-1 sm:pb-0 border-b-2 sm:border-b-0 transition-colors ${
+                      screeningStep === "questions"
+                        ? "border-primary text-primary font-bold"
+                        : Object.keys(answers).length === questions.length && questions.length > 0
+                          ? "border-emerald-500 text-emerald-700 font-medium"
+                          : "border-transparent text-muted-foreground"
+                    }`}
                   >
-                    {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-                    Simpan & Lihat Hasil
-                  </Button>
+                    <div
+                      className={`h-7 w-7 rounded-full flex items-center justify-center text-xs shrink-0 ${
+                        screeningStep === "questions"
+                          ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                          : Object.keys(answers).length === questions.length && questions.length > 0
+                            ? "bg-emerald-500 text-white"
+                            : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {Object.keys(answers).length === questions.length &&
+                      questions.length > 0 &&
+                      screeningStep !== "questions" ? (
+                        <CheckCircle className="h-4 w-4" />
+                      ) : (
+                        "1"
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs sm:text-sm truncate">Tahap 1: Kuesioner TCM</p>
+                      <p className="text-[10px] text-muted-foreground hidden sm:block">
+                        {answeredCount} / {questions.length} Soal Dijawab
+                      </p>
+                    </div>
+                  </div>
+
+                  <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 hidden sm:block" />
+
+                  <div
+                    onClick={() => {
+                      if (isComplete) setScreeningStep("detail");
+                    }}
+                    className={`flex-1 flex items-center gap-2 pb-1 sm:pb-0 border-b-2 sm:border-b-0 transition-colors ${
+                      !isComplete ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+                    } ${
+                      screeningStep === "detail"
+                        ? "border-primary text-primary font-bold"
+                        : complaints || tonguePhoto
+                          ? "border-emerald-500 text-emerald-700 font-medium"
+                          : "border-transparent text-muted-foreground"
+                    }`}
+                  >
+                    <div
+                      className={`h-7 w-7 rounded-full flex items-center justify-center text-xs shrink-0 ${
+                        screeningStep === "detail"
+                          ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                          : complaints || tonguePhoto
+                            ? "bg-emerald-500 text-white"
+                            : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {complaints || tonguePhoto ? <CheckCircle className="h-4 w-4" /> : "2"}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs sm:text-sm truncate">Tahap 2: Foto Lidah & Keluhan</p>
+                      <p className="text-[10px] text-muted-foreground hidden sm:block">
+                        {tonguePhoto ? "Foto Terlampir" : "Diagnosa Lidah"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 hidden sm:block" />
+
+                  <div
+                    onClick={() => {
+                      if (isComplete) setScreeningStep("confirm");
+                    }}
+                    className={`flex-1 flex items-center gap-2 pb-1 sm:pb-0 border-b-2 sm:border-b-0 transition-colors ${
+                      !isComplete ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+                    } ${
+                      screeningStep === "confirm"
+                        ? "border-primary text-primary font-bold"
+                        : "border-transparent text-muted-foreground"
+                    }`}
+                  >
+                    <div
+                      className={`h-7 w-7 rounded-full flex items-center justify-center text-xs shrink-0 ${
+                        screeningStep === "confirm"
+                          ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      3
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs sm:text-sm truncate">Tahap 3: Simpan & Hasil</p>
+                      <p className="text-[10px] text-muted-foreground hidden sm:block">
+                        Konfirmasi & Analisis AI
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* TAHAP 1: KUESIONER GEJALA TCM */}
+              {screeningStep === "questions" && (
+                <div className="space-y-4">
+                  <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground">
+                        Langkah 1: Jawab Kuesioner Gejala Klinis TCM
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Pilih frekuensi keluhan yang paling menggambarkan kondisi tubuh Anda dalam
+                        1-2 minggu terakhir.
+                      </p>
+                    </div>
+                    <Badge variant="secondary" className="text-xs shrink-0">
+                      {answeredCount} / {questions.length} Selesai
+                    </Badge>
+                  </div>
+
+                  {questions.length === 0 ? (
+                    <Card className="p-8 text-center bg-card">
+                      <p className="text-sm font-medium text-foreground">
+                        Belum ada pertanyaan skrening yang tersedia.
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Admin dapat menambah pertanyaan dari menu pengelolaan.
+                      </p>
+                    </Card>
+                  ) : (
+                    <div className="space-y-4">
+                      {paginatedQuestions.map((q, idx) => {
+                        const globalIdx = (screeningCurrentPage - 1) * 10 + idx;
+                        return (
+                          <Card key={q.id} className="bg-card shadow-xs">
+                            <CardContent className="p-3.5 sm:p-5">
+                              <p className="text-xs sm:text-sm font-medium text-foreground leading-relaxed">
+                                {globalIdx + 1}. {q.questionText}
+                              </p>
+                              <div className="mt-3 grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
+                                {[
+                                  ["Tidak pernah", 0],
+                                  ["Kadang", 1],
+                                  ["Sering", 2],
+                                  ["Selalu", 3],
+                                ].map(([label, val]) => {
+                                  const active = answers[q.id] === val;
+                                  return (
+                                    <button
+                                      key={label as string}
+                                      type="button"
+                                      onClick={() =>
+                                        setAnswers((prev) => ({ ...prev, [q.id]: val as number }))
+                                      }
+                                      className={`rounded-full px-3 py-1.5 text-center text-xs transition-colors ${
+                                        active
+                                          ? "bg-primary text-primary-foreground shadow-xs font-medium"
+                                          : "border border-border text-muted-foreground hover:border-primary hover:text-primary"
+                                      }`}
+                                    >
+                                      {label as string}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+
+                      <PaginationControls
+                        currentPage={screeningCurrentPage}
+                        totalPages={totalScreeningPages}
+                        totalItems={questions.length}
+                        itemsPerPage={10}
+                        onPageChange={setScreeningCurrentPage}
+                      />
+                    </div>
+                  )}
+
+                  {questions.length > 0 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t">
+                      <span className="text-xs text-muted-foreground">
+                        {answeredCount} dari {questions.length} pertanyaan dijawab (
+                        {Math.round((answeredCount / (questions.length || 1)) * 100)}%)
+                      </span>
+                      <Button
+                        disabled={!isComplete}
+                        onClick={() => {
+                          setScreeningStep("detail");
+                          window.scrollTo({ top: 0, behavior: "smooth" });
+                        }}
+                        className="w-full sm:w-auto gap-2"
+                      >
+                        Lanjut ke Tahap 2: Foto Lidah & Keluhan
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
+
+              {/* TAHAP 2: FOTO LIDAH & KELUHAN UTAMA */}
+              {screeningStep === "detail" && (
+                <div className="space-y-6">
+                  {/* Keluhan Utama */}
+                  <Card className="bg-card shadow-xs">
+                    <CardHeader className="p-4 sm:p-5 pb-3">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-primary" />
+                        Keluhan Utama & Keterangan Tambahan
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Ceritakan secara rinci gejala fisik atau rasa tidak nyaman yang Anda rasakan
+                        untuk membantu akurasi diagnosa TCM.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-4 sm:p-5 pt-0 space-y-3">
+                      <Textarea
+                        value={complaints}
+                        onChange={(e) => setComplaints(e.target.value)}
+                        placeholder="Contoh: Sering kembung dan begah setelah makan, nyeri pinggang kanan sejak 2 minggu lalu, tidur tidak nyenyak, mudah lelah saat sore hari..."
+                        rows={4}
+                        className="text-xs sm:text-sm resize-none"
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        *Catatan keluhan ini akan dianalisa bersama hasil kuesioner oleh sistem AI
+                        Herbal & Terapis.
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  {/* Diagnosa Foto/Video Lidah */}
+                  <Card className="bg-card shadow-xs">
+                    <CardHeader className="p-4 sm:p-5 pb-3">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <Camera className="h-4 w-4 text-primary" />
+                        Foto / Video Lidah (Diagnosa Lidah TCM / She Zhen)
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Dalam Pengobatan Tradisional Tionghoa (TCM), lidah mencerminkan kondisi
+                        organ dalam, sirkulasi Qi & Darah, serta kelembapan tubuh.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-4 sm:p-5 pt-0 space-y-4">
+                      {/* Hidden File Input for Gallery / Video Upload */}
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*,video/*"
+                        onChange={handleGalleryUpload}
+                        className="hidden"
+                      />
+
+                      {tonguePhoto ? (
+                        <div className="space-y-3">
+                          <div className="relative rounded-xl overflow-hidden border bg-muted/30 max-w-sm mx-auto aspect-4/3 flex items-center justify-center">
+                            {mediaType === "video" ? (
+                              <video
+                                src={tonguePhoto}
+                                controls
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <img
+                                src={tonguePhoto}
+                                alt="Foto Lidah"
+                                className="w-full h-full object-cover"
+                              />
+                            )}
+                          </div>
+                          <div className="flex justify-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setTonguePhoto(null)}
+                              className="text-xs gap-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Hapus / Ambil Ulang Media
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={startCamera}
+                            className="h-24 flex flex-col items-center justify-center gap-2 border-dashed border-2 hover:border-primary hover:bg-primary/5 transition-all"
+                          >
+                            <Camera className="h-6 w-6 text-primary" />
+                            <div className="text-center">
+                              <p className="text-xs font-semibold text-foreground">
+                                Ambil Foto (Kamera)
+                              </p>
+                              <p className="text-[10px] text-muted-foreground">
+                                Gunakan webcam / kamera depan
+                              </p>
+                            </div>
+                          </Button>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="h-24 flex flex-col items-center justify-center gap-2 border-dashed border-2 hover:border-primary hover:bg-primary/5 transition-all"
+                          >
+                            <Upload className="h-6 w-6 text-primary" />
+                            <div className="text-center">
+                              <p className="text-xs font-semibold text-foreground">
+                                Upload Foto / Video
+                              </p>
+                              <p className="text-[10px] text-muted-foreground">
+                                Pilih file gambar atau video dari galeri
+                              </p>
+                            </div>
+                          </Button>
+                        </div>
+                      )}
+
+                      <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-xs text-amber-900 space-y-1">
+                        <p className="font-semibold flex items-center gap-1.5 text-amber-950">
+                          <Sparkles className="h-3.5 w-3.5 text-amber-600" />
+                          Tips Foto Lidah yang Baik:
+                        </p>
+                        <ul className="list-disc list-inside space-y-0.5 text-[11px] text-amber-800">
+                          <li>
+                            Pastikan pencahayaan cukup dan alami (hindari lampu neon terlalu
+                            kuning).
+                          </li>
+                          <li>Julurkan lidah secara santai dan mendatar tanpa ditegangkan.</li>
+                          <li>
+                            Hindari menyikat lidah atau minum kopi/teh berwarna sebelum difoto.
+                          </li>
+                        </ul>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Navigation Buttons for Step 2 */}
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setScreeningStep("questions");
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      }}
+                      className="w-full sm:w-auto gap-2"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      Kembali ke Tahap 1 (Kuesioner)
+                    </Button>
+
+                    <Button
+                      onClick={() => {
+                        setScreeningStep("confirm");
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      }}
+                      className="w-full sm:w-auto gap-2"
+                    >
+                      Lanjut ke Tahap 3: Konfirmasi & Simpan
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* TAHAP 3: KONFIRMASI & SIMPAN */}
+              {screeningStep === "confirm" && (
+                <div className="space-y-6">
+                  <div className="bg-primary/5 border border-primary/20 rounded-xl p-4">
+                    <h3 className="text-sm font-semibold text-foreground">
+                      Langkah 3: Konfirmasi Data Skrening & Analisis AI
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Periksa kembali ringkasan jawaban kuesioner dan data lidah sebelum menyimpan
+                      dan menghasilkan laporan analisis TCM.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Ringkasan Profil Pasien */}
+                    <Card className="bg-card shadow-xs">
+                      <CardHeader className="p-4 pb-2">
+                        <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                          Data Pasien
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-4 pt-0 space-y-2 text-xs">
+                        <div className="flex justify-between border-b pb-1.5">
+                          <span className="text-muted-foreground">Nama Pasien:</span>
+                          <span className="font-medium text-foreground">
+                            {profile?.fullName || user?.email?.split("@")[0] || "Pasien"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between border-b pb-1.5">
+                          <span className="text-muted-foreground">Jenis Kelamin:</span>
+                          <span className="font-medium text-foreground">
+                            {profile?.gender || "Laki-laki"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between border-b pb-1.5">
+                          <span className="text-muted-foreground">Usia / TB / BB:</span>
+                          <span className="font-medium text-foreground">
+                            {profile?.age || 25} th / {profile?.height || 165} cm /{" "}
+                            {profile?.weight || 60} kg
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">No. Telepon / WhatsApp:</span>
+                          <span className="font-medium text-foreground">
+                            {profile?.phone || "-"}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Ringkasan Hasil Kuesioner */}
+                    <Card className="bg-card shadow-xs">
+                      <CardHeader className="p-4 pb-2">
+                        <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                          Status Kuesioner TCM
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-4 pt-0 space-y-2 text-xs">
+                        <div className="flex justify-between border-b pb-1.5">
+                          <span className="text-muted-foreground">Jumlah Soal Terisi:</span>
+                          <span className="font-semibold text-emerald-600">
+                            {Object.keys(answers).length} dari {questions.length} (100% Lengkap)
+                          </span>
+                        </div>
+                        <div className="flex justify-between border-b pb-1.5">
+                          <span className="text-muted-foreground">Total Skor Gejala:</span>
+                          <span className="font-medium text-foreground">
+                            {totalScore} dari maksimal {maxPossibleScore}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground">Estimasi Risiko Awal:</span>
+                          <Badge className={`px-2 py-0.5 text-xs border ${getResult().color}`}>
+                            {getResult().level}
+                          </Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Keluhan Tambahan */}
+                    <Card className="bg-card shadow-xs md:col-span-2">
+                      <CardHeader className="p-4 pb-2">
+                        <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                          Keluhan Utama & Lampiran Foto Lidah
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-4 pt-0 space-y-3 text-xs">
+                        <div>
+                          <span className="text-muted-foreground block mb-1">Catatan Keluhan:</span>
+                          <div className="p-3 bg-muted/40 rounded-lg text-foreground leading-relaxed">
+                            {complaints || "Tidak ada catatan keluhan tambahan."}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <span className="text-muted-foreground">Foto Lidah:</span>
+                          {tonguePhoto ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-emerald-600 font-medium flex items-center gap-1">
+                                <CheckCircle className="h-3.5 w-3.5" /> Sudah Terlampir
+                              </span>
+                              <div className="h-9 w-9 rounded-lg overflow-hidden border">
+                                <img
+                                  src={tonguePhoto}
+                                  alt="Lidah"
+                                  className="h-full w-full object-cover"
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <Badge variant="outline" className="text-muted-foreground">
+                              Tidak Dilampirkan (Opsional)
+                            </Badge>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Navigation Buttons for Step 3 */}
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setScreeningStep("detail");
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      }}
+                      className="w-full sm:w-auto gap-2"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      Kembali ke Tahap 2 (Foto Lidah)
+                    </Button>
+
+                    <Button
+                      disabled={isSaving}
+                      onClick={handleSaveScreening}
+                      className="w-full sm:w-auto gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs font-semibold"
+                    >
+                      {isSaving ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-4 w-4" />
+                      )}
+                      Simpan & Dapatkan Laporan AI TCM
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* CAMERA MODAL DIALOG */}
+              <Dialog open={showCameraModal} onOpenChange={(open) => !open && stopCamera()}>
+                <DialogContent className="max-w-md p-5">
+                  <DialogHeader>
+                    <DialogTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Camera className="h-4 w-4 text-primary" />
+                      Kamera Pengambilan Foto Lidah
+                    </DialogTitle>
+                    <DialogDescription className="text-xs">
+                      Posisikan lidah Anda di tengah kamera, julurkan santai dan klik Ambil Foto.
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="space-y-4">
+                    <div className="relative rounded-xl overflow-hidden bg-black aspect-4/3 flex items-center justify-center">
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover"
+                      />
+                      <canvas ref={canvasRef} className="hidden" />
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={stopCamera}
+                        className="flex-1 text-xs"
+                      >
+                        Batal
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={capturePhoto}
+                        className="flex-1 text-xs gap-1.5 bg-primary text-primary-foreground font-semibold"
+                      >
+                        <Camera className="h-4 w-4" />
+                        Ambil Foto Sekarang
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
           ) : (
             <Card className="bg-card p-5 sm:p-8 shadow-xs text-center space-y-6">

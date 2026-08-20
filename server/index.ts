@@ -411,14 +411,18 @@ app.post("/api/profile/screening-results", async (req, res) => {
       .limit(1);
 
     if (existingProfile) {
-      await db
-        .update(profiles)
-        .set({
-          screeningAnswers: answersStr,
-          screeningCompletedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(profiles.userId, user.id));
+      const profileUpdate: Record<string, string | Date | null> = {
+        screeningAnswers: answersStr,
+        screeningCompletedAt: new Date(),
+        updatedAt: new Date(),
+      };
+      if (req.body.tonguePhotoUrl !== undefined) {
+        profileUpdate.tonguePhotoUrl = req.body.tonguePhotoUrl;
+      }
+      if (req.body.complaints !== undefined) {
+        profileUpdate.address = req.body.complaints;
+      }
+      await db.update(profiles).set(profileUpdate).where(eq(profiles.userId, user.id));
     } else {
       // Create a profile fallback if somehow not present
       await db.insert(profiles).values({
@@ -429,7 +433,8 @@ app.post("/api/profile/screening-results", async (req, res) => {
         height: 165,
         weight: 60,
         phone: "",
-        address: "",
+        address: req.body.complaints || "",
+        tonguePhotoUrl: req.body.tonguePhotoUrl || null,
         screeningAnswers: answersStr,
         screeningCompletedAt: new Date(),
         updatedAt: new Date(),
