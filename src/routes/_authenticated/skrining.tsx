@@ -857,6 +857,7 @@ function Skrining() {
   const handleSubmitAll = async () => {
     setIsSavingScreening(true);
     try {
+      const calcResults = calculateTcmResult();
       await fetch("/api/profile/screening", {
         method: "PUT",
         headers: {
@@ -882,13 +883,17 @@ function Skrining() {
             berat,
             tonguePhoto,
           },
+          score: calcResults.score,
+          maxScore: calcResults.maxScore,
+          level: calcResults.level,
+          advice: calcResults.advice,
+          aiReport: aiReport ? JSON.stringify(aiReport) : null,
         }),
       });
     } catch (err) {
       console.error("Error saving screening results:", err);
     } finally {
       setIsSavingScreening(false);
-      setAiReport(null);
       setStep("result");
       setSubmitted(true);
     }

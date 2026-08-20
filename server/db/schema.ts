@@ -98,5 +98,6 @@ export const screeningResults = pgTable("screening_results", {
   maxScore: integer("max_score").notNull(),
   level: text("level").notNull(),
   advice: text("advice").notNull(),
+  aiReport: text("ai_report"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });

@@ -547,6 +547,7 @@ async function initRealDatabaseTables(pgPool: pg.Pool) {
       max_score INTEGER NOT NULL,
       level TEXT NOT NULL,
       advice TEXT NOT NULL,
+      ai_report TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `;
@@ -556,6 +557,7 @@ async function initRealDatabaseTables(pgPool: pg.Pool) {
     await pgPool.query(
       "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS screening_completed_at TIMESTAMPTZ;",
     );
+    await pgPool.query("ALTER TABLE screening_results ADD COLUMN IF NOT EXISTS ai_report TEXT;");
   } catch (alterErr) {
     console.warn("[AI Studio] Error altering profiles table:", alterErr);
   }

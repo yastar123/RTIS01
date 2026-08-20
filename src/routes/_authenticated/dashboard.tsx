@@ -2670,6 +2670,7 @@ interface ScreeningResultHistory {
   maxScore: number;
   level: string;
   advice: string;
+  aiReport?: string | null;
   createdAt: string;
 }
 
@@ -2681,6 +2682,7 @@ interface AdminScreeningItem {
   maxScore: number;
   level: string;
   advice: string;
+  aiReport?: string | null;
   createdAt: string;
   userEmail: string | null;
   fullName: string | null;
@@ -2691,26 +2693,55 @@ interface AdminScreeningItem {
   complaints: string | null;
 }
 
-function AdminScreeningDetailModal({
+function AdminScreeningDetailView({
   item,
+  allQuestions,
   onClose,
+  waSettings,
 }: {
   item: AdminScreeningItem;
+  allQuestions: ScreeningQuestion[];
   onClose: () => void;
+  waSettings?: { whatsappNumber?: string; whatsappMessageTemplate?: string } | null;
 }) {
-  const [aiReport, setAiReport] = useState<TcmAiReport | null>(null);
+  const [aiReport, setAiReport] = useState<TcmAiReport | null>(() => {
+    if (item.aiReport) {
+      try {
+        const parsed =
+          typeof item.aiReport === "string" ? JSON.parse(item.aiReport) : item.aiReport;
+        if (parsed && typeof parsed === "object") return parsed;
+      } catch (e) {
+        console.error("Gagal parse initial aiReport:", e);
+      }
+    }
+    return null;
+  });
   const [isLoadingAi, setIsLoadingAi] = useState(false);
   const [aiError, setAiError] = useState("");
+  const [detailPage, setDetailPage] = useState(1);
 
   let parsedAnswers: Record<string, number> = {};
   try {
     const raw = typeof item.answers === "string" ? JSON.parse(item.answers) : item.answers;
     parsedAnswers = typeof raw === "object" && raw !== null ? raw.answers || raw : {};
   } catch (e) {
-    console.error("Gagal parse jawaban modal:", e);
+    console.error("Gagal parse jawaban:", e);
   }
 
-  const generateReport = async () => {
+  const generateReport = async (force = false) => {
+    if (!force && item.aiReport) {
+      try {
+        const parsed =
+          typeof item.aiReport === "string" ? JSON.parse(item.aiReport) : item.aiReport;
+        if (parsed && typeof parsed === "object") {
+          setAiReport(parsed);
+          return;
+        }
+      } catch (e) {
+        console.error("Error parsing stored aiReport:", e);
+      }
+    }
+
     setIsLoadingAi(true);
     setAiError("");
     try {
@@ -2738,12 +2769,14 @@ function AdminScreeningDetailModal({
           answers: parsedAnswers,
           patientProfile,
           basicResults,
+          screeningResultId: item.id,
         }),
       });
 
       if (!res.ok) throw new Error("Gagal menghasilkan analisa holistik AI TCM.");
       const data = await res.json();
       setAiReport(data);
+      item.aiReport = JSON.stringify(data);
     } catch (err) {
       setAiError(err instanceof Error ? err.message : "Gagal memuat AI report.");
     } finally {
@@ -2752,146 +2785,269 @@ function AdminScreeningDetailModal({
   };
 
   useEffect(() => {
+    if (item.aiReport) {
+      try {
+        const parsed =
+          typeof item.aiReport === "string" ? JSON.parse(item.aiReport) : item.aiReport;
+        if (parsed && typeof parsed === "object") {
+          setAiReport(parsed);
+          return;
+        }
+      } catch (e) {
+        console.error("Error parsing stored aiReport:", e);
+      }
+    }
     void generateReport();
-  }, [item.id]);
+  }, [item.id, item.aiReport]);
+
+  const handleShareWhatsAppAdmin = () => {
+    if (!item.phone) return;
+    let template =
+      waSettings?.whatsappMessageTemplate ||
+      "Halo [nama],\n\nBerikut adalah hasil skrining TCM Anda. Silakan klik link berikut untuk melihat detail analisis holistik Anda:\n\n[link]\n\nTerima kasih,\nRumah Terapy Ikhtiar Sehat";
+
+    const resultPayload = {
+      nama: item.fullName || item.userEmail?.split("@")[0] || "Pasien",
+      usia: item.age || 25,
+      kelamin: item.gender === "Perempuan" ? "P" : "L",
+      tinggi: 165,
+      berat: 60,
+      keluhan: item.complaints || "",
+      tonguePhoto: item.tonguePhotoUrl || "",
+      answers: parsedAnswers,
+    };
+    const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
+    const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}`;
+
+    template = template.replace(
+      "[nama]",
+      item.fullName || item.userEmail?.split("@")[0] || "Pasien",
+    );
+    template = template.replace("[link]", reportUrl);
+
+    let cleaned = item.phone.replace(/[^0-9]/g, "");
+    if (cleaned.startsWith("0")) cleaned = "62" + cleaned.substring(1);
+    else if (cleaned.startsWith("8")) cleaned = "62" + cleaned;
+
+    window.open(
+      `https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(template)}`,
+      "_blank",
+    );
+  };
+
+  const getAdminReportPageUrl = () => {
+    const resultPayload = {
+      nama: item.fullName || item.userEmail?.split("@")[0] || "Pasien",
+      usia: item.age || 25,
+      kelamin: item.gender === "Perempuan" ? "P" : "L",
+      tinggi: 165,
+      berat: 60,
+      keluhan: item.complaints || "",
+      tonguePhoto: item.tonguePhotoUrl || "",
+      answers: parsedAnswers,
+    };
+    const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
+    return `/skrining?resultData=${encodedPayload}`;
+  };
+
+  const calcRes = calculateTcmResult(parsedAnswers, allQuestions.length || 24);
+  const domConst = getDominantConstitution(calcRes);
+  const helpers = createTcmReportHelpers(parsedAnswers, calcRes, item.complaints || undefined);
 
   return (
-    <Dialog open onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
-        <DialogHeader className="border-b pb-3">
-          <DialogTitle className="font-display text-lg sm:text-xl flex items-center justify-between gap-2">
-            <span className="flex items-center gap-2">
-              <Stethoscope className="h-5 w-5 text-primary" />
-              Laporan Skrining TCM Pasien
-            </span>
-            <Badge variant="outline" className="text-xs">
-              {new Date(item.createdAt).toLocaleDateString("id-ID", { dateStyle: "long" })}
-            </Badge>
-          </DialogTitle>
-          <DialogDescription className="text-xs">
-            Data rekam medis skrining mandiri dan analisis rekomendasi terapi TCM &amp; Akupunktur.
-          </DialogDescription>
-        </DialogHeader>
+    <Card className="bg-card p-5 sm:p-8 shadow-xs space-y-6">
+      {/* Top Header Bar */}
+      <div className="flex items-center justify-between border-b pb-4">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onClose}
+          className="gap-1.5 text-xs sm:text-sm"
+        >
+          <ChevronLeft className="h-4 w-4" /> Kembali ke Riwayat
+        </Button>
+        <span className="text-xs text-muted-foreground font-medium">
+          {new Date(item.createdAt).toLocaleDateString("id-ID", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </span>
+      </div>
 
-        <div className="space-y-6 pt-2">
-          {/* Patient Info Banner */}
-          <div className="rounded-xl border bg-muted/30 p-4 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-            <div>
-              <span className="text-muted-foreground block text-[10px]">Nama Pasien</span>
-              <strong className="text-sm font-semibold text-foreground">
-                {item.fullName || "Pasien"}
-              </strong>
-            </div>
-
-            <div>
-              <span className="text-muted-foreground block text-[10px]">Email &amp; HP</span>
-              <span className="font-medium text-foreground block">{item.userEmail}</span>
-              <span className="text-primary font-mono">{item.phone || "-"}</span>
-            </div>
-
-            <div>
-              <span className="text-muted-foreground block text-[10px]">Usia &amp; Gender</span>
-              <span className="font-medium text-foreground">
-                {item.age ? `${item.age} Tahun` : "-"} / {item.gender || "-"}
-              </span>
-            </div>
-
-            <div>
-              <span className="text-muted-foreground block text-[10px]">Skor &amp; Risiko</span>
-              <Badge
-                className={
-                  item.level?.toLowerCase() === "tinggi"
-                    ? "bg-rose-100 text-rose-800 border-rose-300"
-                    : item.level?.toLowerCase() === "sedang"
-                      ? "bg-amber-100 text-amber-800 border-amber-300"
-                      : "bg-emerald-100 text-emerald-800 border-emerald-300"
-                }
-              >
-                {item.level || "Rendah"} ({item.score}/{item.maxScore})
-              </Badge>
-            </div>
-          </div>
-
-          {/* Anamnesis / Complaints & Tongue Photo */}
-          {(item.complaints || item.tonguePhotoUrl) && (
-            <div className="rounded-xl border p-4 bg-card space-y-3">
-              <h4 className="font-bold text-xs uppercase tracking-wider text-muted-foreground">
-                Anamnesis Keluhan Pasien
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                {item.complaints && (
-                  <div className="sm:col-span-2 space-y-1">
-                    <span className="font-semibold text-foreground">Keluhan Utama:</span>
-                    <p className="p-2.5 rounded bg-muted/40 text-neutral-800 whitespace-pre-line">
-                      {item.complaints}
-                    </p>
-                  </div>
-                )}
-                {item.tonguePhotoUrl && (
-                  <div className="space-y-1">
-                    <span className="font-semibold text-foreground">Foto Lidah:</span>
-                    <img
-                      src={item.tonguePhotoUrl}
-                      alt="Foto Lidah Pasien"
-                      className="h-28 w-auto rounded border object-cover shadow-2xs"
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* AI Report Container */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="font-bold text-sm text-foreground flex items-center gap-1.5">
-                <Sparkles className="h-4 w-4 text-amber-500" />
-                Laporan Analisis Holistik AI TCM
-              </h4>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void generateReport()}
-                disabled={isLoadingAi}
-                className="h-8 text-xs gap-1.5"
-              >
-                {isLoadingAi ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
-                {aiReport ? "Muat Ulang AI" : "Generate Analisis AI"}
-              </Button>
-            </div>
-
-            {isLoadingAi ? (
-              <div className="rounded-xl border p-8 text-center space-y-2 bg-card">
-                <Loader2 className="mx-auto h-8 w-8 animate-spin text-teal-700" />
-                <p className="text-xs text-muted-foreground">
-                  AI sedang menganalisis pola sindrom TCM, formulasi herbal, dan rekomendasi titik
-                  akupunktur pasien...
-                </p>
-              </div>
-            ) : aiError ? (
-              <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-xs text-destructive flex items-center justify-between">
-                <span>{aiError}</span>
-                <Button size="sm" variant="outline" onClick={() => void generateReport()}>
-                  Coba Lagi
-                </Button>
-              </div>
-            ) : (
-              <TcmHerbalReport report={aiReport} answers={parsedAnswers} isAdmin={true} />
-            )}
+      {/* Hero Banner */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-primary/10 border border-primary/20 rounded-xl p-4 text-left">
+        <div className="flex items-center gap-2.5">
+          <Sparkles className="h-5 w-5 text-primary shrink-0" />
+          <div>
+            <h4 className="font-bold text-sm text-foreground">
+              Laporan Analisis Herbal AI &amp; Pemetaan Holistik TCM
+            </h4>
+            <p className="text-xs text-muted-foreground">
+              Mencakup rekomendasi Herbal Indonesia, Herbal China, Titik Akupresur, &amp; Pola
+              Sindrom TCM.
+            </p>
           </div>
         </div>
+        <a
+          href={getAdminReportPageUrl()}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-xs hover:opacity-95 shrink-0"
+        >
+          <Printer className="h-4 w-4" /> Cetak / Unduh Laporan Resmi PDF
+        </a>
+      </div>
 
-        <DialogFooter className="pt-4 border-t mt-4 flex flex-col sm:flex-row gap-2">
-          <Button variant="outline" onClick={onClose} className="text-xs">
-            Tutup
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      {/* Patient Info Banner */}
+      <div className="rounded-xl border bg-muted/30 p-4 space-y-3 text-left">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <User className="h-4 w-4 text-primary" /> Data Rekam Medis Pasien
+          </span>
+          {item.phone && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleShareWhatsAppAdmin}
+              className="h-8 text-xs gap-1.5 text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+            >
+              <PhoneCall className="h-3.5 w-3.5" /> Kirim Hasil via WhatsApp
+            </Button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-background p-3 rounded-lg border">
+          <div>
+            <span className="text-muted-foreground block text-[10px]">Nama Pasien</span>
+            <strong className="text-sm font-semibold text-foreground">
+              {item.fullName || item.userEmail?.split("@")[0] || "Pasien"}
+            </strong>
+          </div>
+          <div>
+            <span className="text-muted-foreground block text-[10px]">Email &amp; HP</span>
+            <span className="font-medium text-foreground block">{item.userEmail}</span>
+            <span className="text-primary font-mono">{item.phone || "-"}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground block text-[10px]">Usia &amp; Gender</span>
+            <span className="font-medium text-foreground">
+              {item.age ? `${item.age} Tahun` : "-"} / {item.gender || "-"}
+            </span>
+          </div>
+          <div>
+            <span className="text-muted-foreground block text-[10px]">Keluhan Utama</span>
+            <span className="font-medium text-foreground line-clamp-2">
+              {item.complaints || "-"}
+            </span>
+          </div>
+        </div>
+        {item.tonguePhotoUrl && (
+          <div className="pt-2 border-t">
+            <span className="text-xs font-semibold text-foreground block mb-1">
+              Foto Lidah Pasien:
+            </span>
+            <img
+              src={item.tonguePhotoUrl}
+              alt="Foto Lidah Pasien"
+              className="h-28 w-auto rounded border object-cover shadow-2xs"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Assessment Summary Header */}
+      <div className="text-center space-y-3">
+        <Badge
+          className={`px-3 py-1 text-xs border ${
+            item.level?.toLowerCase() === "rendah"
+              ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
+              : item.level?.toLowerCase() === "sedang"
+                ? "bg-amber-500/10 text-amber-700 border-amber-500/30"
+                : "bg-rose-500/10 text-rose-700 border-rose-500/30"
+          }`}
+        >
+          Tingkat Risiko: {item.level || "Rendah"}
+        </Badge>
+        <h3 className="font-display text-xl sm:text-2xl font-semibold">
+          Hasil Penilaian Skrening Mandiri
+        </h3>
+        <p className="mx-auto max-w-xl text-xs sm:text-sm text-muted-foreground leading-relaxed">
+          {item.advice ||
+            "Kondisi tubuh Anda relatif seimbang. Pertahankan pola hidup sehat, nutrisi seimbang, dan istirahat teratur."}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Total Skor: <strong>{item.score}</strong> dari maksimum <strong>{item.maxScore}</strong>
+        </p>
+      </div>
+
+      {/* AI Herbal Report Container */}
+      <div className="border-t pt-6 space-y-4 text-left">
+        <TcmHerbalReport
+          report={aiReport}
+          isLoadingAi={isLoadingAi}
+          onRefreshAi={() => void generateReport()}
+          results={calcRes}
+          dominant={domConst}
+          answers={parsedAnswers}
+          isAdmin={true}
+          getActiveSyndromesString={helpers.getActiveSyndromesString}
+          getKeluhanUtamaManifestasi={helpers.getKeluhanUtamaManifestasi}
+          getTop3OrgansString={helpers.getTop3OrgansString}
+          getPrimaryTherapeuticPriority={helpers.getPrimaryTherapeuticPriority}
+          getTop3OrgansList={helpers.getTop3OrgansList}
+          getMostInfluentialSymptoms={helpers.getMostInfluentialSymptoms}
+          listCriticalImbalances={helpers.listCriticalImbalances}
+        />
+      </div>
+
+      {/* Detail Jawaban Anda */}
+      <div className="border-t pt-6 space-y-4 text-left">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-medium text-foreground">Detail Jawaban Anda:</h4>
+          <span className="text-xs text-muted-foreground">
+            Total {allQuestions.length} Pertanyaan
+          </span>
+        </div>
+        <div className="space-y-3">
+          {allQuestions.slice((detailPage - 1) * 5, detailPage * 5).map((q, idx) => {
+            const globalIdx = (detailPage - 1) * 5 + idx;
+            const answerVal = parsedAnswers[q.id] ?? null;
+            const labels = ["Tidak pernah", "Kadang", "Sering", "Selalu"];
+            const answerLabel = answerVal !== null ? labels[answerVal] : "Tidak dijawab";
+
+            return (
+              <div
+                key={q.id}
+                className="p-3 bg-muted/40 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs sm:text-sm"
+              >
+                <div className="space-y-1">
+                  <span className="font-semibold text-primary">Pertanyaan #{globalIdx + 1}</span>
+                  <p className="text-foreground">{q.questionText}</p>
+                </div>
+                <Badge
+                  variant="outline"
+                  className="shrink-0 self-start sm:self-center bg-background border-primary/30 text-primary font-medium"
+                >
+                  {answerLabel} {answerVal !== null ? `(${answerVal} pt)` : ""}
+                </Badge>
+              </div>
+            );
+          })}
+        </div>
+
+        {allQuestions.length > 5 && (
+          <PaginationControls
+            currentPage={detailPage}
+            totalPages={Math.ceil(allQuestions.length / 5) || 1}
+            totalItems={allQuestions.length}
+            itemsPerPage={5}
+            onPageChange={setDetailPage}
+          />
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -3049,7 +3205,10 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
   const [aiReport, setAiReport] = useState<TcmAiReport | null>(null);
   const [isLoadingAi, setIsLoadingAi] = useState(false);
 
-  const requestAiAnalysis = async (answersToUse: Record<string, number>) => {
+  const requestAiAnalysis = async (
+    answersToUse: Record<string, number>,
+    screeningResultId?: string,
+  ) => {
     setIsLoadingAi(true);
     try {
       const currentProfile = {
@@ -3072,11 +3231,15 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
           questions,
           patientProfile: currentProfile,
           basicResults: calculatedResults,
+          screeningResultId,
         }),
       });
       if (res.ok) {
         const data = await res.json();
         setAiReport(data);
+        if (selectedHistoryItem && selectedHistoryItem.id === screeningResultId) {
+          selectedHistoryItem.aiReport = JSON.stringify(data);
+        }
       }
     } catch (err) {
       console.error("Gagal mendapatkan analisa AI:", err);
@@ -3093,13 +3256,28 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
 
   useEffect(() => {
     if (selectedHistoryItem) {
+      if (selectedHistoryItem.aiReport) {
+        try {
+          const parsed =
+            typeof selectedHistoryItem.aiReport === "string"
+              ? JSON.parse(selectedHistoryItem.aiReport)
+              : selectedHistoryItem.aiReport;
+          if (parsed && typeof parsed === "object") {
+            setAiReport(parsed);
+            return; // Cache hit! Do NOT call AI!
+          }
+        } catch (e) {
+          console.error("Error parsing stored aiReport in history item:", e);
+        }
+      }
+
       try {
         const parsedAnswers =
           typeof selectedHistoryItem.answers === "string"
             ? JSON.parse(selectedHistoryItem.answers)
             : selectedHistoryItem.answers;
         if (parsedAnswers && Object.keys(parsedAnswers).length > 0) {
-          void requestAiAnalysis(parsedAnswers);
+          void requestAiAnalysis(parsedAnswers, selectedHistoryItem.id);
         }
       } catch (e) {
         console.error("Error parsing history answers:", e);
@@ -3362,6 +3540,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
           maxScore: maxPossibleScore,
           level: getResult().level,
           advice: getResult().advice,
+          aiReport: aiReport ? JSON.stringify(aiReport) : null,
         }),
       });
 
@@ -3386,1070 +3565,1086 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      {/* Patient Tab Switcher */}
-      {!isAdmin && (
-        <div className="flex items-center gap-2 border-b pb-3">
-          <Button
-            variant={patientTab === "new" ? "default" : "outline"}
-            size="sm"
-            onClick={() => {
-              setPatientTab("new");
-              setIsSubmitted(false);
-              setAnswers({});
-            }}
-            className="text-xs sm:text-sm gap-1.5"
-          >
-            <Stethoscope className="h-4 w-4" />
-            Isi Skrening Baru
-          </Button>
-          <Button
-            variant={patientTab === "history" ? "default" : "outline"}
-            size="sm"
-            onClick={() => {
-              setPatientTab("history");
-              setSelectedHistoryItem(null);
-              void fetchHistory();
-            }}
-            className="text-xs sm:text-sm gap-1.5"
-          >
-            <History className="h-4 w-4" />
-            Riwayat Skrening Saya ({history.length})
-          </Button>
-        </div>
-      )}
-      {/* Admin Mode Sub-Navigation Header */}
-      {isAdmin && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
-          <div className="flex items-center gap-2">
-            <Button
-              variant={adminModeTab === "results" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setAdminModeTab("results")}
-              className="text-xs sm:text-sm gap-1.5"
-            >
-              <Stethoscope className="h-4 w-4" />
-              Hasil Skrining Pasien ({adminScreenings.length})
-            </Button>
-            <Button
-              variant={adminModeTab === "manage" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setAdminModeTab("manage")}
-              className="text-xs sm:text-sm gap-1.5"
-            >
-              <Pencil className="h-4 w-4" />
-              Kelola Soal Skrening ({questions.length})
-            </Button>
-            <Button
-              variant={adminModeTab === "test" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setAdminModeTab("test")}
-              className="text-xs sm:text-sm gap-1.5"
-            >
-              <Eye className="h-4 w-4" />
-              Uji Coba Tampilan Pasien
-            </Button>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              void fetchQuestions();
-              void fetchAdminScreenings();
-            }}
-            disabled={isLoading || isLoadingAdminScreenings}
-            className="text-xs text-muted-foreground gap-1.5"
-          >
-            <RefreshCw
-              className={`h-3.5 w-3.5 ${
-                isLoading || isLoadingAdminScreenings ? "animate-spin" : ""
-              }`}
-            />
-            Muat Ulang
-          </Button>
-        </div>
-      )}
-
-      {/* Loading state */}
-      {isLoading ? (
-        <Card className="p-8 text-center bg-card">
-          <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary mb-2" />
-          <p className="text-xs sm:text-sm text-muted-foreground">Memuat soal skrening...</p>
-        </Card>
-      ) : error ? (
-        <Card className="p-6 text-center bg-destructive/10 text-destructive">
-          <p className="text-sm font-medium">{error}</p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void fetchQuestions()}
-            className="mt-3"
-          >
-            Coba Lagi
-          </Button>
-        </Card>
-      ) : isAdmin && adminModeTab === "results" ? (
-        /* ALL PATIENT SCREENINGS CARDS VIEW FOR ADMIN */
-        <div className="space-y-6">
-          {/* Top Summary Stats Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="bg-card">
-              <CardContent className="p-4 flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground font-medium">Total Hasil Skrining</p>
-                  <p className="text-2xl font-bold font-display text-foreground mt-1">
-                    {adminScreenings.length}
-                  </p>
-                </div>
-                <div className="h-10 w-10 rounded-full bg-primary/10 text-primary flex items-center justify-center">
-                  <Stethoscope className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-card">
-              <CardContent className="p-4 flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground font-medium">Risiko Tinggi</p>
-                  <p className="text-2xl font-bold font-display text-rose-600 mt-1">
-                    {adminScreenings.filter((s) => s.level?.toLowerCase() === "tinggi").length}
-                  </p>
-                </div>
-                <div className="h-10 w-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center">
-                  <AlertTriangle className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-card">
-              <CardContent className="p-4 flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground font-medium">Risiko Sedang</p>
-                  <p className="text-2xl font-bold font-display text-amber-600 mt-1">
-                    {adminScreenings.filter((s) => s.level?.toLowerCase() === "sedang").length}
-                  </p>
-                </div>
-                <div className="h-10 w-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center">
-                  <Activity className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-card">
-              <CardContent className="p-4 flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground font-medium">Risiko Rendah</p>
-                  <p className="text-2xl font-bold font-display text-emerald-600 mt-1">
-                    {
-                      adminScreenings.filter((s) => s.level?.toLowerCase() === "rendah" || !s.level)
-                        .length
-                    }
-                  </p>
-                </div>
-                <div className="h-10 w-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                  <CheckCircle2 className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* List/Search Header */}
-          <Card className="bg-card">
-            <CardHeader className="pb-3">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                <div>
-                  <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-                    <Stethoscope className="h-5 w-5 text-primary" />
-                    Daftar Skrining Kesehatan Seluruh Pasien
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    Admin dapat memeriksa rekam medis skrining mandiri, skor risiko, dan rekomendasi
-                    terapi holistik TCM setiap pasien.
-                  </CardDescription>
-                </div>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void fetchAdminScreenings()}
-                  disabled={isLoadingAdminScreenings}
-                  className="gap-1.5 text-xs self-start md:self-auto"
-                >
-                  <RefreshCw
-                    className={`h-3.5 w-3.5 ${isLoadingAdminScreenings ? "animate-spin" : ""}`}
-                  />
-                  Muat Ulang
-                </Button>
-              </div>
-            </CardHeader>
-
-            <CardContent className="space-y-4">
-              <div className="flex flex-col sm:flex-row gap-3 justify-between">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Cari nama pasien, email, telepon, atau keluhan..."
-                    value={adminSearchQuery}
-                    onChange={(e) => setAdminSearchQuery(e.target.value)}
-                    className="pl-9 text-xs sm:text-sm"
-                  />
-                </div>
-
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-                  <Button
-                    variant={adminLevelFilter === "ALL" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setAdminLevelFilter("ALL")}
-                    className="text-xs h-8"
-                  >
-                    Semua ({adminScreenings.length})
-                  </Button>
-                  <Button
-                    variant={adminLevelFilter === "Tinggi" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setAdminLevelFilter("Tinggi")}
-                    className="text-xs h-8 text-rose-600 border-rose-200 hover:bg-rose-50"
-                  >
-                    Tinggi (
-                    {adminScreenings.filter((s) => s.level?.toLowerCase() === "tinggi").length})
-                  </Button>
-                  <Button
-                    variant={adminLevelFilter === "Sedang" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setAdminLevelFilter("Sedang")}
-                    className="text-xs h-8 text-amber-600 border-amber-200 hover:bg-amber-50"
-                  >
-                    Sedang (
-                    {adminScreenings.filter((s) => s.level?.toLowerCase() === "sedang").length})
-                  </Button>
-                  <Button
-                    variant={adminLevelFilter === "Rendah" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setAdminLevelFilter("Rendah")}
-                    className="text-xs h-8 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
-                  >
-                    Rendah (
-                    {
-                      adminScreenings.filter((s) => s.level?.toLowerCase() === "rendah" || !s.level)
-                        .length
-                    }
-                    )
-                  </Button>
-                </div>
-              </div>
-
-              {/* Patient Screenings List */}
-              {isLoadingAdminScreenings ? (
-                <div className="p-8 text-center text-xs text-muted-foreground">
-                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary mb-2" />
-                  Memuat data skrining pasien...
-                </div>
-              ) : (
-                (() => {
-                  const filtered = adminScreenings.filter((item) => {
-                    const matchQuery = [
-                      item.fullName,
-                      item.userEmail,
-                      item.phone,
-                      item.complaints,
-                      item.advice,
-                    ]
-                      .filter(Boolean)
-                      .join(" ")
-                      .toLowerCase()
-                      .includes(adminSearchQuery.toLowerCase());
-
-                    const matchLevel =
-                      adminLevelFilter === "ALL" ||
-                      item.level?.toLowerCase() === adminLevelFilter.toLowerCase();
-
-                    return matchQuery && matchLevel;
-                  });
-
-                  if (filtered.length === 0) {
-                    return (
-                      <div className="rounded-xl border border-dashed p-8 text-center text-xs text-muted-foreground">
-                        Tidak ada data hasil skrining pasien yang ditemukan.
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {filtered.map((item) => {
-                          const isHigh = item.level?.toLowerCase() === "tinggi";
-                          const isMed = item.level?.toLowerCase() === "sedang";
-
-                          return (
-                            <Card
-                              key={item.id}
-                              className="bg-card border hover:border-primary/40 transition-colors shadow-2xs"
-                            >
-                              <CardContent className="p-4 space-y-3">
-                                <div className="flex items-start justify-between gap-2">
-                                  <div>
-                                    <div className="font-bold text-sm text-foreground">
-                                      {item.fullName || item.userEmail?.split("@")[0] || "Pasien"}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      {item.userEmail}
-                                    </div>
-                                    {item.phone && (
-                                      <div className="text-xs text-primary font-mono mt-0.5">
-                                        {item.phone}
-                                      </div>
-                                    )}
-                                  </div>
-                                  <Badge
-                                    className={
-                                      isHigh
-                                        ? "bg-rose-100 text-rose-800 border-rose-300 font-semibold"
-                                        : isMed
-                                          ? "bg-amber-100 text-amber-800 border-amber-300 font-semibold"
-                                          : "bg-emerald-100 text-emerald-800 border-emerald-300 font-semibold"
-                                    }
-                                  >
-                                    Risiko: {item.level || "Rendah"}
-                                  </Badge>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-2 text-xs bg-muted/40 p-2.5 rounded-lg">
-                                  <div>
-                                    <span className="text-muted-foreground block text-[10px]">
-                                      Tanggal:
-                                    </span>
-                                    <span className="font-medium">
-                                      {new Date(item.createdAt).toLocaleDateString("id-ID", {
-                                        day: "numeric",
-                                        month: "short",
-                                        year: "numeric",
-                                      })}
-                                    </span>
-                                  </div>
-                                  <div>
-                                    <span className="text-muted-foreground block text-[10px]">
-                                      Skor Jawaban:
-                                    </span>
-                                    <span className="font-mono font-bold text-primary">
-                                      {item.score} / {item.maxScore}
-                                    </span>
-                                  </div>
-                                </div>
-
-                                {(item.complaints || item.advice) && (
-                                  <p className="text-xs text-muted-foreground line-clamp-2 bg-background p-2 rounded border">
-                                    <strong>Keluhan/Saran:</strong> {item.complaints || item.advice}
-                                  </p>
-                                )}
-
-                                <div className="flex items-center justify-between pt-1 gap-2 border-t">
-                                  <Button
-                                    variant="default"
-                                    size="sm"
-                                    onClick={() => setSelectedAdminDetail(item)}
-                                    className="text-xs gap-1.5 bg-teal-700 hover:bg-teal-800 text-white flex-1"
-                                  >
-                                    <Eye className="h-3.5 w-3.5" />
-                                    Lihat Laporan AI Pasien
-                                  </Button>
-
-                                  {item.phone && (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleShareWhatsAppAdmin(item)}
-                                      className="text-xs gap-1 text-emerald-700 border-emerald-300 hover:bg-emerald-50 shrink-0"
-                                      title="Kirim WA ke Pasien"
-                                    >
-                                      <PhoneCall className="h-3.5 w-3.5" />
-                                      <span className="hidden sm:inline">WA</span>
-                                    </Button>
-                                  )}
-
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => void handleDeleteAdminScreening(item)}
-                                    className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 shrink-0"
-                                    title="Hapus Hasil Skrining"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })()
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      ) : isAdmin && adminModeTab === "manage" ? (
-        /* ADMIN MANAGEMENT PANEL */
-        <div className="space-y-6">
-          {/* Add Question Card */}
-          <Card className="bg-card shadow-xs">
-            <CardHeader className="pb-3">
-              <CardTitle className="font-display text-base sm:text-lg flex items-center justify-between">
-                <span>Tambah Soal Skrening Baru</span>
-                <Badge variant="secondary" className="font-mono text-xs font-normal">
-                  Total: {questions.length} Soal
-                </Badge>
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Admin dapat menentukan pertanyaan skrening sesuai kebutuhan analisis kesehatan
-                pasien.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form
-                onSubmit={(e) => void handleAddQuestion(e)}
-                className="flex flex-col sm:flex-row gap-2"
+      {isAdmin && selectedAdminDetail ? (
+        <AdminScreeningDetailView
+          item={selectedAdminDetail}
+          allQuestions={questions}
+          onClose={() => setSelectedAdminDetail(null)}
+          waSettings={waSettings}
+        />
+      ) : (
+        <>
+          {/* Patient Tab Switcher */}
+          {!isAdmin && (
+            <div className="flex items-center gap-2 border-b pb-3">
+              <Button
+                variant={patientTab === "new" ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setPatientTab("new");
+                  setIsSubmitted(false);
+                  setAnswers({});
+                }}
+                className="text-xs sm:text-sm gap-1.5"
               >
-                <Input
-                  placeholder="Ketikkan teks pertanyaan baru di sini..."
-                  value={newQuestionText}
-                  onChange={(e) => setNewQuestionText(e.target.value)}
-                  className="flex-1 text-xs sm:text-sm"
-                  disabled={isAdding}
-                />
+                <Stethoscope className="h-4 w-4" />
+                Isi Skrening Baru
+              </Button>
+              <Button
+                variant={patientTab === "history" ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setPatientTab("history");
+                  setSelectedHistoryItem(null);
+                  void fetchHistory();
+                }}
+                className="text-xs sm:text-sm gap-1.5"
+              >
+                <History className="h-4 w-4" />
+                Riwayat Skrening Saya ({history.length})
+              </Button>
+            </div>
+          )}
+          {/* Admin Mode Sub-Navigation Header */}
+          {isAdmin && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
+              <div className="flex items-center gap-2">
                 <Button
-                  type="submit"
-                  disabled={isAdding || !newQuestionText.trim()}
+                  variant={adminModeTab === "results" ? "default" : "outline"}
                   size="sm"
-                  className="gap-1.5 shrink-0"
+                  onClick={() => setAdminModeTab("results")}
+                  className="text-xs sm:text-sm gap-1.5"
                 >
-                  {isAdding ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Plus className="h-4 w-4" />
-                  )}
-                  Tambah Soal
+                  <Stethoscope className="h-4 w-4" />
+                  Hasil Skrining Pasien ({adminScreenings.length})
                 </Button>
-              </form>
-            </CardContent>
-          </Card>
-
-          {/* List of Questions for Admin */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium text-muted-foreground px-1">
-              Daftar Pertanyaan Saat Ini:
-            </h3>
-            {questions.length === 0 ? (
-              <Card className="p-6 text-center text-muted-foreground text-xs sm:text-sm">
-                Belum ada pertanyaan skrening. Silakan tambahkan pertanyaan di atas.
-              </Card>
-            ) : (
-              questions.map((q, idx) => (
-                <Card
-                  key={q.id}
-                  className="bg-card shadow-xs border transition-all hover:border-primary/40"
+                <Button
+                  variant={adminModeTab === "manage" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setAdminModeTab("manage")}
+                  className="text-xs sm:text-sm gap-1.5"
                 >
-                  <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    {editingId === q.id ? (
-                      <div className="flex-1 flex flex-col sm:flex-row gap-2 w-full">
-                        <Input
-                          value={editingText}
-                          onChange={(e) => setEditingText(e.target.value)}
-                          className="flex-1 text-xs sm:text-sm"
-                          autoFocus
-                        />
-                        <div className="flex gap-2 shrink-0">
-                          <Button
-                            size="sm"
-                            onClick={() => void handleSaveEdit(q.id)}
-                            className="gap-1 text-xs"
-                          >
-                            <Save className="h-3.5 w-3.5" /> Simpan
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setEditingId(null);
-                              setEditingText("");
-                            }}
-                            className="text-xs"
-                          >
-                            Batal
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex items-start gap-3 flex-1 min-w-0">
-                          <span className="font-mono text-xs sm:text-sm font-bold text-primary bg-primary/10 rounded-md px-2 py-1 shrink-0">
-                            #{idx + 1}
-                          </span>
-                          <p className="text-xs sm:text-sm text-foreground font-medium pt-0.5 leading-relaxed break-words">
-                            {q.questionText}
-                          </p>
-                        </div>
+                  <Pencil className="h-4 w-4" />
+                  Kelola Soal Skrening ({questions.length})
+                </Button>
+                <Button
+                  variant={adminModeTab === "test" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setAdminModeTab("test")}
+                  className="text-xs sm:text-sm gap-1.5"
+                >
+                  <Eye className="h-4 w-4" />
+                  Uji Coba Tampilan Pasien
+                </Button>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  void fetchQuestions();
+                  void fetchAdminScreenings();
+                }}
+                disabled={isLoading || isLoadingAdminScreenings}
+                className="text-xs text-muted-foreground gap-1.5"
+              >
+                <RefreshCw
+                  className={`h-3.5 w-3.5 ${
+                    isLoading || isLoadingAdminScreenings ? "animate-spin" : ""
+                  }`}
+                />
+                Muat Ulang
+              </Button>
+            </div>
+          )}
 
-                        <div className="flex items-center gap-1 shrink-0 self-end sm:self-center border-t sm:border-t-0 pt-2 sm:pt-0 w-full sm:w-auto justify-end">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => void handleMoveOrder(idx, "up")}
-                            disabled={idx === 0}
-                            title="Naikkan Urutan"
-                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                          >
-                            <ChevronUp className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => void handleMoveOrder(idx, "down")}
-                            disabled={idx === questions.length - 1}
-                            title="Turunkan Urutan"
-                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                          >
-                            <ChevronDown className="h-4 w-4" />
-                          </Button>
-
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setEditingId(q.id);
-                              setEditingText(q.questionText);
-                            }}
-                            className="h-8 text-xs text-muted-foreground hover:text-foreground gap-1"
-                          >
-                            <Pencil className="h-3.5 w-3.5" /> Edit
-                          </Button>
-
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => void handleDeleteQuestion(q.id, q.questionText)}
-                            className="h-8 text-xs text-destructive hover:bg-destructive/10 gap-1"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" /> Hapus
-                          </Button>
-                        </div>
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
-        </div>
-      ) : !isAdmin && patientTab === "history" ? (
-        /* PATIENT HISTORY VIEW */
-        selectedHistoryItem ? (
-          /* DETAILED VIEW OF SPECIFIC HISTORY ATTEMPT */
-          <Card className="bg-card p-5 sm:p-8 shadow-xs space-y-6">
-            <div className="flex items-center justify-between border-b pb-4">
+          {/* Loading state */}
+          {isLoading ? (
+            <Card className="p-8 text-center bg-card">
+              <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary mb-2" />
+              <p className="text-xs sm:text-sm text-muted-foreground">Memuat soal skrening...</p>
+            </Card>
+          ) : error ? (
+            <Card className="p-6 text-center bg-destructive/10 text-destructive">
+              <p className="text-sm font-medium">{error}</p>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setSelectedHistoryItem(null)}
-                className="gap-1.5 text-xs sm:text-sm"
+                onClick={() => void fetchQuestions()}
+                className="mt-3"
               >
-                <ChevronLeft className="h-4 w-4" /> Kembali ke Riwayat
+                Coba Lagi
               </Button>
-              <span className="text-xs text-muted-foreground">
-                {new Date(selectedHistoryItem.createdAt).toLocaleDateString("id-ID", {
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </span>
-            </div>
+            </Card>
+          ) : isAdmin && adminModeTab === "results" ? (
+            /* ALL PATIENT SCREENINGS CARDS VIEW FOR ADMIN */
+            <div className="space-y-6">
+              {/* Top Summary Stats Cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <Card className="bg-card">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-muted-foreground font-medium">
+                        Total Hasil Skrining
+                      </p>
+                      <p className="text-2xl font-bold font-display text-foreground mt-1">
+                        {adminScreenings.length}
+                      </p>
+                    </div>
+                    <div className="h-10 w-10 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                      <Stethoscope className="h-5 w-5" />
+                    </div>
+                  </CardContent>
+                </Card>
 
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-primary/10 border border-primary/20 rounded-xl p-4 text-left">
-              <div className="flex items-center gap-2.5">
-                <Sparkles className="h-5 w-5 text-primary shrink-0" />
-                <div>
-                  <h4 className="font-bold text-sm text-foreground">
-                    Laporan Analisis Herbal AI & Pemetaan Holistik TCM
-                  </h4>
-                  <p className="text-xs text-muted-foreground">
-                    Mencakup rekomendasi Herbal Indonesia, Herbal China, Titik Akupresur, & Pola
-                    Sindrom TCM.
-                  </p>
-                </div>
+                <Card className="bg-card">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-muted-foreground font-medium">Risiko Tinggi</p>
+                      <p className="text-2xl font-bold font-display text-rose-600 mt-1">
+                        {adminScreenings.filter((s) => s.level?.toLowerCase() === "tinggi").length}
+                      </p>
+                    </div>
+                    <div className="h-10 w-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center">
+                      <AlertTriangle className="h-5 w-5" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-card">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-muted-foreground font-medium">Risiko Sedang</p>
+                      <p className="text-2xl font-bold font-display text-amber-600 mt-1">
+                        {adminScreenings.filter((s) => s.level?.toLowerCase() === "sedang").length}
+                      </p>
+                    </div>
+                    <div className="h-10 w-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center">
+                      <Activity className="h-5 w-5" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-card">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-muted-foreground font-medium">Risiko Rendah</p>
+                      <p className="text-2xl font-bold font-display text-emerald-600 mt-1">
+                        {
+                          adminScreenings.filter(
+                            (s) => s.level?.toLowerCase() === "rendah" || !s.level,
+                          ).length
+                        }
+                      </p>
+                    </div>
+                    <div className="h-10 w-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                      <CheckCircle2 className="h-5 w-5" />
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
-              {(() => {
-                let parsedAnswers: Record<string, number> = {};
-                try {
-                  parsedAnswers =
-                    typeof selectedHistoryItem.answers === "string"
-                      ? JSON.parse(selectedHistoryItem.answers)
-                      : selectedHistoryItem.answers;
-                } catch (e) {
-                  console.error(e);
-                }
-                return (
-                  <a
-                    href={getFullReportPageUrl(parsedAnswers)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-xs hover:opacity-95 shrink-0"
+
+              {/* List/Search Header */}
+              <Card className="bg-card">
+                <CardHeader className="pb-3">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div>
+                      <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                        <Stethoscope className="h-5 w-5 text-primary" />
+                        Daftar Skrining Kesehatan Seluruh Pasien
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Admin dapat memeriksa rekam medis skrining mandiri, skor risiko, dan
+                        rekomendasi terapi holistik TCM setiap pasien.
+                      </CardDescription>
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void fetchAdminScreenings()}
+                      disabled={isLoadingAdminScreenings}
+                      className="gap-1.5 text-xs self-start md:self-auto"
+                    >
+                      <RefreshCw
+                        className={`h-3.5 w-3.5 ${isLoadingAdminScreenings ? "animate-spin" : ""}`}
+                      />
+                      Muat Ulang
+                    </Button>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="space-y-4">
+                  <div className="flex flex-col sm:flex-row gap-3 justify-between">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Cari nama pasien, email, telepon, atau keluhan..."
+                        value={adminSearchQuery}
+                        onChange={(e) => setAdminSearchQuery(e.target.value)}
+                        className="pl-9 text-xs sm:text-sm"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                      <Button
+                        variant={adminLevelFilter === "ALL" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setAdminLevelFilter("ALL")}
+                        className="text-xs h-8"
+                      >
+                        Semua ({adminScreenings.length})
+                      </Button>
+                      <Button
+                        variant={adminLevelFilter === "Tinggi" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setAdminLevelFilter("Tinggi")}
+                        className="text-xs h-8 text-rose-600 border-rose-200 hover:bg-rose-50"
+                      >
+                        Tinggi (
+                        {adminScreenings.filter((s) => s.level?.toLowerCase() === "tinggi").length})
+                      </Button>
+                      <Button
+                        variant={adminLevelFilter === "Sedang" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setAdminLevelFilter("Sedang")}
+                        className="text-xs h-8 text-amber-600 border-amber-200 hover:bg-amber-50"
+                      >
+                        Sedang (
+                        {adminScreenings.filter((s) => s.level?.toLowerCase() === "sedang").length})
+                      </Button>
+                      <Button
+                        variant={adminLevelFilter === "Rendah" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setAdminLevelFilter("Rendah")}
+                        className="text-xs h-8 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                      >
+                        Rendah (
+                        {
+                          adminScreenings.filter(
+                            (s) => s.level?.toLowerCase() === "rendah" || !s.level,
+                          ).length
+                        }
+                        )
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Patient Screenings List */}
+                  {isLoadingAdminScreenings ? (
+                    <div className="p-8 text-center text-xs text-muted-foreground">
+                      <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary mb-2" />
+                      Memuat data skrining pasien...
+                    </div>
+                  ) : (
+                    (() => {
+                      const filtered = adminScreenings.filter((item) => {
+                        const matchQuery = [
+                          item.fullName,
+                          item.userEmail,
+                          item.phone,
+                          item.complaints,
+                          item.advice,
+                        ]
+                          .filter(Boolean)
+                          .join(" ")
+                          .toLowerCase()
+                          .includes(adminSearchQuery.toLowerCase());
+
+                        const matchLevel =
+                          adminLevelFilter === "ALL" ||
+                          item.level?.toLowerCase() === adminLevelFilter.toLowerCase();
+
+                        return matchQuery && matchLevel;
+                      });
+
+                      if (filtered.length === 0) {
+                        return (
+                          <div className="rounded-xl border border-dashed p-8 text-center text-xs text-muted-foreground">
+                            Tidak ada data hasil skrining pasien yang ditemukan.
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {filtered.map((item) => {
+                              const isHigh = item.level?.toLowerCase() === "tinggi";
+                              const isMed = item.level?.toLowerCase() === "sedang";
+
+                              return (
+                                <Card
+                                  key={item.id}
+                                  className="bg-card border hover:border-primary/40 transition-colors shadow-2xs"
+                                >
+                                  <CardContent className="p-4 space-y-3">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div>
+                                        <div className="font-bold text-sm text-foreground">
+                                          {item.fullName ||
+                                            item.userEmail?.split("@")[0] ||
+                                            "Pasien"}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                          {item.userEmail}
+                                        </div>
+                                        {item.phone && (
+                                          <div className="text-xs text-primary font-mono mt-0.5">
+                                            {item.phone}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <Badge
+                                        className={
+                                          isHigh
+                                            ? "bg-rose-100 text-rose-800 border-rose-300 font-semibold"
+                                            : isMed
+                                              ? "bg-amber-100 text-amber-800 border-amber-300 font-semibold"
+                                              : "bg-emerald-100 text-emerald-800 border-emerald-300 font-semibold"
+                                        }
+                                      >
+                                        Risiko: {item.level || "Rendah"}
+                                      </Badge>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2 text-xs bg-muted/40 p-2.5 rounded-lg">
+                                      <div>
+                                        <span className="text-muted-foreground block text-[10px]">
+                                          Tanggal:
+                                        </span>
+                                        <span className="font-medium">
+                                          {new Date(item.createdAt).toLocaleDateString("id-ID", {
+                                            day: "numeric",
+                                            month: "short",
+                                            year: "numeric",
+                                          })}
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <span className="text-muted-foreground block text-[10px]">
+                                          Skor Jawaban:
+                                        </span>
+                                        <span className="font-mono font-bold text-primary">
+                                          {item.score} / {item.maxScore}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    {(item.complaints || item.advice) && (
+                                      <p className="text-xs text-muted-foreground line-clamp-2 bg-background p-2 rounded border">
+                                        <strong>Keluhan/Saran:</strong>{" "}
+                                        {item.complaints || item.advice}
+                                      </p>
+                                    )}
+
+                                    <div className="flex items-center justify-between pt-1 gap-2 border-t">
+                                      <Button
+                                        variant="default"
+                                        size="sm"
+                                        onClick={() => setSelectedAdminDetail(item)}
+                                        className="text-xs gap-1.5 bg-teal-700 hover:bg-teal-800 text-white flex-1"
+                                      >
+                                        <Eye className="h-3.5 w-3.5" />
+                                        Lihat Laporan AI Pasien
+                                      </Button>
+
+                                      {item.phone && (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => handleShareWhatsAppAdmin(item)}
+                                          className="text-xs gap-1 text-emerald-700 border-emerald-300 hover:bg-emerald-50 shrink-0"
+                                          title="Kirim WA ke Pasien"
+                                        >
+                                          <PhoneCall className="h-3.5 w-3.5" />
+                                          <span className="hidden sm:inline">WA</span>
+                                        </Button>
+                                      )}
+
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => void handleDeleteAdminScreening(item)}
+                                        className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 shrink-0"
+                                        title="Hapus Hasil Skrining"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          ) : isAdmin && adminModeTab === "manage" ? (
+            /* ADMIN MANAGEMENT PANEL */
+            <div className="space-y-6">
+              {/* Add Question Card */}
+              <Card className="bg-card shadow-xs">
+                <CardHeader className="pb-3">
+                  <CardTitle className="font-display text-base sm:text-lg flex items-center justify-between">
+                    <span>Tambah Soal Skrening Baru</span>
+                    <Badge variant="secondary" className="font-mono text-xs font-normal">
+                      Total: {questions.length} Soal
+                    </Badge>
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Admin dapat menentukan pertanyaan skrening sesuai kebutuhan analisis kesehatan
+                    pasien.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form
+                    onSubmit={(e) => void handleAddQuestion(e)}
+                    className="flex flex-col sm:flex-row gap-2"
                   >
-                    <Printer className="h-4 w-4" /> Cetak / Unduh Laporan Resmi PDF
-                  </a>
-                );
-              })()}
-            </div>
+                    <Input
+                      placeholder="Ketikkan teks pertanyaan baru di sini..."
+                      value={newQuestionText}
+                      onChange={(e) => setNewQuestionText(e.target.value)}
+                      className="flex-1 text-xs sm:text-sm"
+                      disabled={isAdding}
+                    />
+                    <Button
+                      type="submit"
+                      disabled={isAdding || !newQuestionText.trim()}
+                      size="sm"
+                      className="gap-1.5 shrink-0"
+                    >
+                      {isAdding ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Plus className="h-4 w-4" />
+                      )}
+                      Tambah Soal
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
 
-            <div className="text-center space-y-4">
-              <Badge
-                className={`px-3 py-1 text-xs border ${
-                  selectedHistoryItem.level === "Rendah"
-                    ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
-                    : selectedHistoryItem.level === "Sedang"
-                      ? "bg-amber-500/10 text-amber-700 border-amber-500/30"
-                      : "bg-rose-500/10 text-rose-700 border-rose-500/30"
-                }`}
-              >
-                Tingkat Risiko: {selectedHistoryItem.level}
-              </Badge>
-              <h3 className="font-display text-xl sm:text-2xl font-semibold">
-                Hasil Penilaian Skrening Mandiri
-              </h3>
-              <p className="mx-auto max-w-lg text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                {selectedHistoryItem.advice}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Total Skor: <strong>{selectedHistoryItem.score}</strong> dari maksimum{" "}
-                <strong>{selectedHistoryItem.maxScore}</strong>
-              </p>
-            </div>
-
-            {/* AI HERBAL REPORT COMPONENT FOR HISTORY ITEM */}
-            {(() => {
-              let parsedAnswers: Record<string, number> = {};
-              try {
-                parsedAnswers =
-                  typeof selectedHistoryItem.answers === "string"
-                    ? JSON.parse(selectedHistoryItem.answers)
-                    : selectedHistoryItem.answers;
-              } catch (e) {
-                console.error(e);
-              }
-              const calcRes = calculateTcmResult(parsedAnswers, questions.length);
-              const domConst = getDominantConstitution(calcRes);
-              const helpers = createTcmReportHelpers(parsedAnswers, calcRes, profile?.address);
-
-              return (
-                <div className="border-t pt-6 space-y-4 text-left">
-                  <TcmHerbalReport
-                    report={aiReport}
-                    isLoadingAi={isLoadingAi}
-                    onRefreshAi={() => void requestAiAnalysis(parsedAnswers)}
-                    results={calcRes}
-                    dominant={domConst}
-                    getActiveSyndromesString={helpers.getActiveSyndromesString}
-                    getKeluhanUtamaManifestasi={helpers.getKeluhanUtamaManifestasi}
-                    getTop3OrgansString={helpers.getTop3OrgansString}
-                    getPrimaryTherapeuticPriority={helpers.getPrimaryTherapeuticPriority}
-                    getTop3OrgansList={helpers.getTop3OrgansList}
-                    getMostInfluentialSymptoms={helpers.getMostInfluentialSymptoms}
-                    listCriticalImbalances={helpers.listCriticalImbalances}
-                  />
-                </div>
-              );
-            })()}
-
-            <div className="border-t pt-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-medium text-foreground">Detail Jawaban Anda:</h4>
-                <span className="text-xs text-muted-foreground">
-                  Total {questions.length} Pertanyaan
-                </span>
-              </div>
+              {/* List of Questions for Admin */}
               <div className="space-y-3">
-                {questions
-                  .slice((historyDetailQuestionsPage - 1) * 5, historyDetailQuestionsPage * 5)
-                  .map((q, idx) => {
-                    const globalIdx = (historyDetailQuestionsPage - 1) * 5 + idx;
-                    let answerVal: number | null = null;
+                <h3 className="text-sm font-medium text-muted-foreground px-1">
+                  Daftar Pertanyaan Saat Ini:
+                </h3>
+                {questions.length === 0 ? (
+                  <Card className="p-6 text-center text-muted-foreground text-xs sm:text-sm">
+                    Belum ada pertanyaan skrening. Silakan tambahkan pertanyaan di atas.
+                  </Card>
+                ) : (
+                  questions.map((q, idx) => (
+                    <Card
+                      key={q.id}
+                      className="bg-card shadow-xs border transition-all hover:border-primary/40"
+                    >
+                      <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        {editingId === q.id ? (
+                          <div className="flex-1 flex flex-col sm:flex-row gap-2 w-full">
+                            <Input
+                              value={editingText}
+                              onChange={(e) => setEditingText(e.target.value)}
+                              className="flex-1 text-xs sm:text-sm"
+                              autoFocus
+                            />
+                            <div className="flex gap-2 shrink-0">
+                              <Button
+                                size="sm"
+                                onClick={() => void handleSaveEdit(q.id)}
+                                className="gap-1 text-xs"
+                              >
+                                <Save className="h-3.5 w-3.5" /> Simpan
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setEditingId(null);
+                                  setEditingText("");
+                                }}
+                                className="text-xs"
+                              >
+                                Batal
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-start gap-3 flex-1 min-w-0">
+                              <span className="font-mono text-xs sm:text-sm font-bold text-primary bg-primary/10 rounded-md px-2 py-1 shrink-0">
+                                #{idx + 1}
+                              </span>
+                              <p className="text-xs sm:text-sm text-foreground font-medium pt-0.5 leading-relaxed break-words">
+                                {q.questionText}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0 self-end sm:self-center border-t sm:border-t-0 pt-2 sm:pt-0 w-full sm:w-auto justify-end">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => void handleMoveOrder(idx, "up")}
+                                disabled={idx === 0}
+                                title="Naikkan Urutan"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              >
+                                <ChevronUp className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => void handleMoveOrder(idx, "down")}
+                                disabled={idx === questions.length - 1}
+                                title="Turunkan Urutan"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              >
+                                <ChevronDown className="h-4 w-4" />
+                              </Button>
+
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingId(q.id);
+                                  setEditingText(q.questionText);
+                                }}
+                                className="h-8 text-xs text-muted-foreground hover:text-foreground gap-1"
+                              >
+                                <Pencil className="h-3.5 w-3.5" /> Edit
+                              </Button>
+
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => void handleDeleteQuestion(q.id, q.questionText)}
+                                className="h-8 text-xs text-destructive hover:bg-destructive/10 gap-1"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" /> Hapus
+                              </Button>
+                            </div>
+                          </>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </div>
+          ) : !isAdmin && patientTab === "history" ? (
+            /* PATIENT HISTORY VIEW */
+            selectedHistoryItem ? (
+              /* DETAILED VIEW OF SPECIFIC HISTORY ATTEMPT */
+              <Card className="bg-card p-5 sm:p-8 shadow-xs space-y-6">
+                <div className="flex items-center justify-between border-b pb-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedHistoryItem(null)}
+                    className="gap-1.5 text-xs sm:text-sm"
+                  >
+                    <ChevronLeft className="h-4 w-4" /> Kembali ke Riwayat
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(selectedHistoryItem.createdAt).toLocaleDateString("id-ID", {
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-primary/10 border border-primary/20 rounded-xl p-4 text-left">
+                  <div className="flex items-center gap-2.5">
+                    <Sparkles className="h-5 w-5 text-primary shrink-0" />
+                    <div>
+                      <h4 className="font-bold text-sm text-foreground">
+                        Laporan Analisis Herbal AI & Pemetaan Holistik TCM
+                      </h4>
+                      <p className="text-xs text-muted-foreground">
+                        Mencakup rekomendasi Herbal Indonesia, Herbal China, Titik Akupresur, & Pola
+                        Sindrom TCM.
+                      </p>
+                    </div>
+                  </div>
+                  {(() => {
+                    let parsedAnswers: Record<string, number> = {};
                     try {
-                      const parsedAnswers =
+                      parsedAnswers =
                         typeof selectedHistoryItem.answers === "string"
                           ? JSON.parse(selectedHistoryItem.answers)
                           : selectedHistoryItem.answers;
-                      answerVal = parsedAnswers[q.id] ?? null;
                     } catch (e) {
-                      console.error("Error parsing answers:", e);
+                      console.error(e);
                     }
-
-                    const labels = ["Tidak pernah", "Kadang", "Sering", "Selalu"];
-                    const answerLabel = answerVal !== null ? labels[answerVal] : "Tidak dijawab";
-
                     return (
-                      <div
-                        key={q.id}
-                        className="p-3 bg-muted/40 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs sm:text-sm"
+                      <a
+                        href={getFullReportPageUrl(parsedAnswers)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-xs hover:opacity-95 shrink-0"
                       >
-                        <div className="space-y-1">
-                          <span className="font-semibold text-primary">
-                            Pertanyaan #{globalIdx + 1}
-                          </span>
-                          <p className="text-foreground">{q.questionText}</p>
-                        </div>
-                        <Badge
-                          variant="outline"
-                          className="shrink-0 self-start sm:self-center bg-background border-primary/30 text-primary font-medium"
-                        >
-                          {answerLabel} {answerVal !== null ? `(${answerVal} pt)` : ""}
-                        </Badge>
-                      </div>
+                        <Printer className="h-4 w-4" /> Cetak / Unduh Laporan Resmi PDF
+                      </a>
                     );
-                  })}
-              </div>
+                  })()}
+                </div>
 
-              {questions.length > 5 && (
-                <PaginationControls
-                  currentPage={historyDetailQuestionsPage}
-                  totalPages={Math.ceil(questions.length / 5) || 1}
-                  totalItems={questions.length}
-                  itemsPerPage={5}
-                  onPageChange={setHistoryDetailQuestionsPage}
-                />
-              )}
-            </div>
-          </Card>
-        ) : (
-          /* HISTORY LIST */
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium text-foreground">Riwayat Penilaian Kesehatan TCM</h3>
-            {isLoadingHistory ? (
-              <Card className="p-8 text-center">
-                <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary mb-2" />
-                <p className="text-sm text-muted-foreground">Memuat riwayat skrening...</p>
-              </Card>
-            ) : history.length === 0 ? (
-              <Card className="p-8 text-center bg-card">
-                <History className="mx-auto h-12 w-12 text-muted-foreground opacity-40 mb-3" />
-                <p className="text-sm font-medium text-foreground">Belum ada riwayat skrening.</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Silakan pilih tab "Isi Skrening Baru" di atas untuk melakukan skrening pertama
-                  Anda.
-                </p>
-              </Card>
-            ) : (
-              <div className="grid gap-4">
-                {history.map((item) => (
-                  <Card
-                    key={item.id}
-                    className="bg-card border hover:border-primary/40 transition-colors"
+                <div className="text-center space-y-4">
+                  <Badge
+                    className={`px-3 py-1 text-xs border ${
+                      selectedHistoryItem.level === "Rendah"
+                        ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
+                        : selectedHistoryItem.level === "Sedang"
+                          ? "bg-amber-500/10 text-amber-700 border-amber-500/30"
+                          : "bg-rose-500/10 text-rose-700 border-rose-500/30"
+                    }`}
                   >
-                    <CardContent className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="space-y-1.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold text-muted-foreground">
-                            {new Date(item.createdAt).toLocaleDateString("id-ID", {
-                              day: "numeric",
-                              month: "long",
-                              year: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                          <Badge
-                            className={`px-2 py-0 text-[10px] border ${
-                              item.level === "Rendah"
-                                ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
-                                : item.level === "Sedang"
-                                  ? "bg-amber-500/10 text-amber-700 border-amber-500/30"
-                                  : "bg-rose-500/10 text-rose-700 border-rose-500/30"
-                            }`}
-                          >
-                            Risiko: {item.level}
-                          </Badge>
-                        </div>
-                        <p className="text-xs sm:text-sm font-medium text-foreground line-clamp-2">
-                          {item.advice}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Skor: <strong>{item.score}</strong> / {item.maxScore}
-                        </p>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedHistoryItem(item)}
-                        className="shrink-0"
-                      >
-                        Lihat Detail
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
-        )
-      ) : /* PATIENT / TEST VIEW (NEW ATTEMPT) */
-      !isSubmitted ? (
-        <div className="space-y-4">
-          {questions.length === 0 ? (
-            <Card className="p-8 text-center bg-card">
-              <p className="text-sm font-medium text-foreground">
-                Belum ada pertanyaan skrening yang tersedia.
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Admin dapat menambah pertanyaan dari menu pengelolaan.
-              </p>
-            </Card>
-          ) : (
-            <div className="space-y-4">
-              {paginatedQuestions.map((q, idx) => {
-                const globalIdx = (screeningCurrentPage - 1) * 10 + idx;
-                return (
-                  <Card key={q.id} className="bg-card shadow-xs">
-                    <CardContent className="p-3.5 sm:p-5">
-                      <p className="text-xs sm:text-sm font-medium text-foreground leading-relaxed">
-                        {globalIdx + 1}. {q.questionText}
-                      </p>
-                      <div className="mt-3 grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
-                        {[
-                          ["Tidak pernah", 0],
-                          ["Kadang", 1],
-                          ["Sering", 2],
-                          ["Selalu", 3],
-                        ].map(([label, val]) => {
-                          const active = answers[q.id] === val;
-                          return (
-                            <button
-                              key={label as string}
-                              type="button"
-                              onClick={() =>
-                                setAnswers((prev) => ({ ...prev, [q.id]: val as number }))
-                              }
-                              className={`rounded-full px-3 py-1.5 text-center text-xs transition-colors ${
-                                active
-                                  ? "bg-primary text-primary-foreground shadow-xs font-medium"
-                                  : "border border-border text-muted-foreground hover:border-primary hover:text-primary"
-                              }`}
-                            >
-                              {label as string}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+                    Tingkat Risiko: {selectedHistoryItem.level}
+                  </Badge>
+                  <h3 className="font-display text-xl sm:text-2xl font-semibold">
+                    Hasil Penilaian Skrening Mandiri
+                  </h3>
+                  <p className="mx-auto max-w-lg text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                    {selectedHistoryItem.advice}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Total Skor: <strong>{selectedHistoryItem.score}</strong> dari maksimum{" "}
+                    <strong>{selectedHistoryItem.maxScore}</strong>
+                  </p>
+                </div>
 
-              <PaginationControls
-                currentPage={screeningCurrentPage}
-                totalPages={totalScreeningPages}
-                totalItems={questions.length}
-                itemsPerPage={10}
-                onPageChange={setScreeningCurrentPage}
-              />
-            </div>
-          )}
+                {/* AI HERBAL REPORT COMPONENT FOR HISTORY ITEM */}
+                {(() => {
+                  let parsedAnswers: Record<string, number> = {};
+                  try {
+                    parsedAnswers =
+                      typeof selectedHistoryItem.answers === "string"
+                        ? JSON.parse(selectedHistoryItem.answers)
+                        : selectedHistoryItem.answers;
+                  } catch (e) {
+                    console.error(e);
+                  }
+                  const calcRes = calculateTcmResult(parsedAnswers, questions.length);
+                  const domConst = getDominantConstitution(calcRes);
+                  const helpers = createTcmReportHelpers(parsedAnswers, calcRes, profile?.address);
 
-          {questions.length > 0 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-              <span className="text-xs text-muted-foreground">
-                {answeredCount} dari {questions.length} pertanyaan dijawab
-              </span>
-              <Button
-                disabled={!isComplete || isSaving}
-                onClick={handleSaveScreening}
-                className="w-full sm:w-auto gap-2"
-              >
-                {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-                Simpan & Lihat Hasil
-              </Button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <Card className="bg-card p-5 sm:p-8 shadow-xs text-center space-y-6">
-          {/* Top Banner with Button to Full Printable Report */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 text-left">
-            <div className="flex items-center gap-2.5">
-              <Sparkles className="h-5 w-5 text-emerald-600 shrink-0" />
-              <div>
-                <h4 className="font-bold text-sm text-emerald-950">
-                  Laporan Analisis AI Herbal Berhasil Dihasilkan!
-                </h4>
-                <p className="text-xs text-emerald-800">
-                  Rekomendasi lengkap Herbal Indonesia, Herbal China (TCM), & Akupresur telah
-                  tersedia.
-                </p>
-              </div>
-            </div>
-            <a
-              href={getFullReportPageUrl(answers)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 shrink-0"
-            >
-              <Printer className="h-4 w-4" /> Cetak / Unduh Laporan Resmi PDF
-            </a>
-          </div>
-
-          <div className="space-y-3">
-            <Badge className={`px-3 py-1 text-xs border ${getResult().color}`}>
-              Tingkat Risiko: {getResult().level}
-            </Badge>
-            <h2 className="font-display text-xl sm:text-2xl font-semibold">
-              Hasil Penilaian Skrening Mandiri Berhasil Disimpan
-            </h2>
-            <p className="mx-auto max-w-lg text-xs sm:text-sm text-muted-foreground leading-relaxed">
-              {getResult().advice}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Total Skor: <strong>{totalScore}</strong> dari maksimum{" "}
-              <strong>{maxPossibleScore}</strong> ({questions.length} soal)
-            </p>
-          </div>
-
-          {/* AI HERBAL REPORT COMPONENT FOR NEW SUBMISSION */}
-          {(() => {
-            const calcRes = calculateTcmResult(answers, questions.length);
-            const domConst = getDominantConstitution(calcRes);
-            const helpers = createTcmReportHelpers(answers, calcRes, profile?.address);
-
-            return (
-              <div className="border-t pt-6 text-left space-y-4">
-                <TcmHerbalReport
-                  report={aiReport}
-                  isLoadingAi={isLoadingAi}
-                  onRefreshAi={() => void requestAiAnalysis(answers)}
-                  results={calcRes}
-                  dominant={domConst}
-                  getActiveSyndromesString={helpers.getActiveSyndromesString}
-                  getKeluhanUtamaManifestasi={helpers.getKeluhanUtamaManifestasi}
-                  getTop3OrgansString={helpers.getTop3OrgansString}
-                  getPrimaryTherapeuticPriority={helpers.getPrimaryTherapeuticPriority}
-                  getTop3OrgansList={helpers.getTop3OrgansList}
-                  getMostInfluentialSymptoms={helpers.getMostInfluentialSymptoms}
-                  listCriticalImbalances={helpers.listCriticalImbalances}
-                />
-              </div>
-            );
-          })()}
-
-          {/* Questionnaire response history with pagination */}
-          <div className="border-t pt-6 space-y-4 text-left">
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="text-sm font-semibold text-foreground">
-                  Riwayat Pengisian & Detail Jawaban Soal
-                </h4>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Rincian jawaban yang baru saja Anda isi pada kuesioner skrining:
-                </p>
-              </div>
-              <Badge variant="secondary" className="text-xs">
-                {Object.keys(answers).length} / {questions.length} Dijawab
-              </Badge>
-            </div>
-
-            <div className="space-y-3">
-              {questions
-                .slice((submittedQuestionsPage - 1) * 5, submittedQuestionsPage * 5)
-                .map((q, idx) => {
-                  const globalIdx = (submittedQuestionsPage - 1) * 5 + idx;
-                  const answerVal = answers[q.id];
-                  const labels = [
-                    { label: "Tidak pernah", score: 0 },
-                    { label: "Kadang", score: 1 },
-                    { label: "Sering", score: 2 },
-                    { label: "Selalu", score: 3 },
-                  ];
                   return (
-                    <div
-                      key={q.id}
-                      className="p-3.5 bg-muted/30 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs sm:text-sm"
-                    >
-                      <div className="space-y-1 flex-1">
-                        <span className="text-[11px] font-bold text-primary">
-                          Soal #{globalIdx + 1}
-                        </span>
-                        <p className="font-medium text-foreground">{q.questionText}</p>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5 shrink-0">
-                        {labels.map((opt) => {
-                          const active = answerVal === opt.score;
-                          return (
-                            <span
-                              key={opt.score}
-                              className={`rounded-md px-2 py-0.5 text-[11px] ${
-                                active
-                                  ? "bg-primary text-primary-foreground font-semibold"
-                                  : "bg-muted text-muted-foreground opacity-60 border"
-                              }`}
-                            >
-                              {opt.label} ({opt.score})
-                            </span>
-                          );
-                        })}
-                      </div>
+                    <div className="border-t pt-6 space-y-4 text-left">
+                      <TcmHerbalReport
+                        report={aiReport}
+                        isLoadingAi={isLoadingAi}
+                        onRefreshAi={() => void requestAiAnalysis(parsedAnswers)}
+                        results={calcRes}
+                        dominant={domConst}
+                        getActiveSyndromesString={helpers.getActiveSyndromesString}
+                        getKeluhanUtamaManifestasi={helpers.getKeluhanUtamaManifestasi}
+                        getTop3OrgansString={helpers.getTop3OrgansString}
+                        getPrimaryTherapeuticPriority={helpers.getPrimaryTherapeuticPriority}
+                        getTop3OrgansList={helpers.getTop3OrgansList}
+                        getMostInfluentialSymptoms={helpers.getMostInfluentialSymptoms}
+                        listCriticalImbalances={helpers.listCriticalImbalances}
+                      />
                     </div>
                   );
-                })}
+                })()}
+
+                <div className="border-t pt-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-medium text-foreground">Detail Jawaban Anda:</h4>
+                    <span className="text-xs text-muted-foreground">
+                      Total {questions.length} Pertanyaan
+                    </span>
+                  </div>
+                  <div className="space-y-3">
+                    {questions
+                      .slice((historyDetailQuestionsPage - 1) * 5, historyDetailQuestionsPage * 5)
+                      .map((q, idx) => {
+                        const globalIdx = (historyDetailQuestionsPage - 1) * 5 + idx;
+                        let answerVal: number | null = null;
+                        try {
+                          const parsedAnswers =
+                            typeof selectedHistoryItem.answers === "string"
+                              ? JSON.parse(selectedHistoryItem.answers)
+                              : selectedHistoryItem.answers;
+                          answerVal = parsedAnswers[q.id] ?? null;
+                        } catch (e) {
+                          console.error("Error parsing answers:", e);
+                        }
+
+                        const labels = ["Tidak pernah", "Kadang", "Sering", "Selalu"];
+                        const answerLabel =
+                          answerVal !== null ? labels[answerVal] : "Tidak dijawab";
+
+                        return (
+                          <div
+                            key={q.id}
+                            className="p-3 bg-muted/40 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs sm:text-sm"
+                          >
+                            <div className="space-y-1">
+                              <span className="font-semibold text-primary">
+                                Pertanyaan #{globalIdx + 1}
+                              </span>
+                              <p className="text-foreground">{q.questionText}</p>
+                            </div>
+                            <Badge
+                              variant="outline"
+                              className="shrink-0 self-start sm:self-center bg-background border-primary/30 text-primary font-medium"
+                            >
+                              {answerLabel} {answerVal !== null ? `(${answerVal} pt)` : ""}
+                            </Badge>
+                          </div>
+                        );
+                      })}
+                  </div>
+
+                  {questions.length > 5 && (
+                    <PaginationControls
+                      currentPage={historyDetailQuestionsPage}
+                      totalPages={Math.ceil(questions.length / 5) || 1}
+                      totalItems={questions.length}
+                      itemsPerPage={5}
+                      onPageChange={setHistoryDetailQuestionsPage}
+                    />
+                  )}
+                </div>
+              </Card>
+            ) : (
+              /* HISTORY LIST */
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium text-foreground">
+                  Riwayat Penilaian Kesehatan TCM
+                </h3>
+                {isLoadingHistory ? (
+                  <Card className="p-8 text-center">
+                    <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary mb-2" />
+                    <p className="text-sm text-muted-foreground">Memuat riwayat skrening...</p>
+                  </Card>
+                ) : history.length === 0 ? (
+                  <Card className="p-8 text-center bg-card">
+                    <History className="mx-auto h-12 w-12 text-muted-foreground opacity-40 mb-3" />
+                    <p className="text-sm font-medium text-foreground">
+                      Belum ada riwayat skrening.
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Silakan pilih tab "Isi Skrening Baru" di atas untuk melakukan skrening pertama
+                      Anda.
+                    </p>
+                  </Card>
+                ) : (
+                  <div className="grid gap-4">
+                    {history.map((item) => (
+                      <Card
+                        key={item.id}
+                        className="bg-card border hover:border-primary/40 transition-colors"
+                      >
+                        <CardContent className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-muted-foreground">
+                                {new Date(item.createdAt).toLocaleDateString("id-ID", {
+                                  day: "numeric",
+                                  month: "long",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                              <Badge
+                                className={`px-2 py-0 text-[10px] border ${
+                                  item.level === "Rendah"
+                                    ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
+                                    : item.level === "Sedang"
+                                      ? "bg-amber-500/10 text-amber-700 border-amber-500/30"
+                                      : "bg-rose-500/10 text-rose-700 border-rose-500/30"
+                                }`}
+                              >
+                                Risiko: {item.level}
+                              </Badge>
+                            </div>
+                            <p className="text-xs sm:text-sm font-medium text-foreground line-clamp-2">
+                              {item.advice}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Skor: <strong>{item.score}</strong> / {item.maxScore}
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedHistoryItem(item)}
+                            className="shrink-0"
+                          >
+                            Lihat Detail
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          ) : /* PATIENT / TEST VIEW (NEW ATTEMPT) */
+          !isSubmitted ? (
+            <div className="space-y-4">
+              {questions.length === 0 ? (
+                <Card className="p-8 text-center bg-card">
+                  <p className="text-sm font-medium text-foreground">
+                    Belum ada pertanyaan skrening yang tersedia.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Admin dapat menambah pertanyaan dari menu pengelolaan.
+                  </p>
+                </Card>
+              ) : (
+                <div className="space-y-4">
+                  {paginatedQuestions.map((q, idx) => {
+                    const globalIdx = (screeningCurrentPage - 1) * 10 + idx;
+                    return (
+                      <Card key={q.id} className="bg-card shadow-xs">
+                        <CardContent className="p-3.5 sm:p-5">
+                          <p className="text-xs sm:text-sm font-medium text-foreground leading-relaxed">
+                            {globalIdx + 1}. {q.questionText}
+                          </p>
+                          <div className="mt-3 grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
+                            {[
+                              ["Tidak pernah", 0],
+                              ["Kadang", 1],
+                              ["Sering", 2],
+                              ["Selalu", 3],
+                            ].map(([label, val]) => {
+                              const active = answers[q.id] === val;
+                              return (
+                                <button
+                                  key={label as string}
+                                  type="button"
+                                  onClick={() =>
+                                    setAnswers((prev) => ({ ...prev, [q.id]: val as number }))
+                                  }
+                                  className={`rounded-full px-3 py-1.5 text-center text-xs transition-colors ${
+                                    active
+                                      ? "bg-primary text-primary-foreground shadow-xs font-medium"
+                                      : "border border-border text-muted-foreground hover:border-primary hover:text-primary"
+                                  }`}
+                                >
+                                  {label as string}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+
+                  <PaginationControls
+                    currentPage={screeningCurrentPage}
+                    totalPages={totalScreeningPages}
+                    totalItems={questions.length}
+                    itemsPerPage={10}
+                    onPageChange={setScreeningCurrentPage}
+                  />
+                </div>
+              )}
+
+              {questions.length > 0 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+                  <span className="text-xs text-muted-foreground">
+                    {answeredCount} dari {questions.length} pertanyaan dijawab
+                  </span>
+                  <Button
+                    disabled={!isComplete || isSaving}
+                    onClick={handleSaveScreening}
+                    className="w-full sm:w-auto gap-2"
+                  >
+                    {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Simpan & Lihat Hasil
+                  </Button>
+                </div>
+              )}
             </div>
+          ) : (
+            <Card className="bg-card p-5 sm:p-8 shadow-xs text-center space-y-6">
+              {/* Top Banner with Button to Full Printable Report */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 text-left">
+                <div className="flex items-center gap-2.5">
+                  <Sparkles className="h-5 w-5 text-emerald-600 shrink-0" />
+                  <div>
+                    <h4 className="font-bold text-sm text-emerald-950">
+                      Laporan Analisis AI Herbal Berhasil Dihasilkan!
+                    </h4>
+                    <p className="text-xs text-emerald-800">
+                      Rekomendasi lengkap Herbal Indonesia, Herbal China (TCM), & Akupresur telah
+                      tersedia.
+                    </p>
+                  </div>
+                </div>
+                <a
+                  href={getFullReportPageUrl(answers)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 shrink-0"
+                >
+                  <Printer className="h-4 w-4" /> Cetak / Unduh Laporan Resmi PDF
+                </a>
+              </div>
 
-            {questions.length > 5 && (
-              <PaginationControls
-                currentPage={submittedQuestionsPage}
-                totalPages={Math.ceil(questions.length / 5) || 1}
-                totalItems={questions.length}
-                itemsPerPage={5}
-                onPageChange={setSubmittedQuestionsPage}
-              />
-            )}
-          </div>
+              <div className="space-y-3">
+                <Badge className={`px-3 py-1 text-xs border ${getResult().color}`}>
+                  Tingkat Risiko: {getResult().level}
+                </Badge>
+                <h2 className="font-display text-xl sm:text-2xl font-semibold">
+                  Hasil Penilaian Skrening Mandiri Berhasil Disimpan
+                </h2>
+                <p className="mx-auto max-w-lg text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                  {getResult().advice}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Total Skor: <strong>{totalScore}</strong> dari maksimum{" "}
+                  <strong>{maxPossibleScore}</strong> ({questions.length} soal)
+                </p>
+              </div>
 
-          <div className="flex flex-wrap justify-center gap-3 pt-4 border-t">
-            <Button onClick={() => onNavigate("reservations")}>
-              <CalendarDays className="mr-1.5 h-4 w-4" /> Jadwalkan Konsultasi
-            </Button>
-            {profile?.phone && (
-              <a
-                href={getWhatsAppUrlForPatient() || "#"}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
-              >
-                <Phone className="mr-1 h-4 w-4" /> Kirim Hasil ke WhatsApp Saya
-              </a>
-            )}
-            <a
-              href={getWhatsAppUrlForClinic() || "#"}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-teal-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-teal-700 transition-colors"
-            >
-              <Phone className="mr-1 h-4 w-4" /> Kirim Hasil ke WhatsApp Klinik
-            </a>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setAnswers({});
-                setIsSubmitted(false);
-              }}
-            >
-              Ulangi Skrening
-            </Button>
-          </div>
-        </Card>
-      )}
+              {/* AI HERBAL REPORT COMPONENT FOR NEW SUBMISSION */}
+              {(() => {
+                const calcRes = calculateTcmResult(answers, questions.length);
+                const domConst = getDominantConstitution(calcRes);
+                const helpers = createTcmReportHelpers(answers, calcRes, profile?.address);
 
-      {selectedAdminDetail && (
-        <AdminScreeningDetailModal
-          item={selectedAdminDetail}
-          onClose={() => setSelectedAdminDetail(null)}
-        />
+                return (
+                  <div className="border-t pt-6 text-left space-y-4">
+                    <TcmHerbalReport
+                      report={aiReport}
+                      isLoadingAi={isLoadingAi}
+                      onRefreshAi={() => void requestAiAnalysis(answers)}
+                      results={calcRes}
+                      dominant={domConst}
+                      getActiveSyndromesString={helpers.getActiveSyndromesString}
+                      getKeluhanUtamaManifestasi={helpers.getKeluhanUtamaManifestasi}
+                      getTop3OrgansString={helpers.getTop3OrgansString}
+                      getPrimaryTherapeuticPriority={helpers.getPrimaryTherapeuticPriority}
+                      getTop3OrgansList={helpers.getTop3OrgansList}
+                      getMostInfluentialSymptoms={helpers.getMostInfluentialSymptoms}
+                      listCriticalImbalances={helpers.listCriticalImbalances}
+                    />
+                  </div>
+                );
+              })()}
+
+              {/* Questionnaire response history with pagination */}
+              <div className="border-t pt-6 space-y-4 text-left">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-semibold text-foreground">
+                      Riwayat Pengisian & Detail Jawaban Soal
+                    </h4>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Rincian jawaban yang baru saja Anda isi pada kuesioner skrining:
+                    </p>
+                  </div>
+                  <Badge variant="secondary" className="text-xs">
+                    {Object.keys(answers).length} / {questions.length} Dijawab
+                  </Badge>
+                </div>
+
+                <div className="space-y-3">
+                  {questions
+                    .slice((submittedQuestionsPage - 1) * 5, submittedQuestionsPage * 5)
+                    .map((q, idx) => {
+                      const globalIdx = (submittedQuestionsPage - 1) * 5 + idx;
+                      const answerVal = answers[q.id];
+                      const labels = [
+                        { label: "Tidak pernah", score: 0 },
+                        { label: "Kadang", score: 1 },
+                        { label: "Sering", score: 2 },
+                        { label: "Selalu", score: 3 },
+                      ];
+                      return (
+                        <div
+                          key={q.id}
+                          className="p-3.5 bg-muted/30 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs sm:text-sm"
+                        >
+                          <div className="space-y-1 flex-1">
+                            <span className="text-[11px] font-bold text-primary">
+                              Soal #{globalIdx + 1}
+                            </span>
+                            <p className="font-medium text-foreground">{q.questionText}</p>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 shrink-0">
+                            {labels.map((opt) => {
+                              const active = answerVal === opt.score;
+                              return (
+                                <span
+                                  key={opt.score}
+                                  className={`rounded-md px-2 py-0.5 text-[11px] ${
+                                    active
+                                      ? "bg-primary text-primary-foreground font-semibold"
+                                      : "bg-muted text-muted-foreground opacity-60 border"
+                                  }`}
+                                >
+                                  {opt.label} ({opt.score})
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+
+                {questions.length > 5 && (
+                  <PaginationControls
+                    currentPage={submittedQuestionsPage}
+                    totalPages={Math.ceil(questions.length / 5) || 1}
+                    totalItems={questions.length}
+                    itemsPerPage={5}
+                    onPageChange={setSubmittedQuestionsPage}
+                  />
+                )}
+              </div>
+
+              <div className="flex flex-wrap justify-center gap-3 pt-4 border-t">
+                <Button onClick={() => onNavigate("reservations")}>
+                  <CalendarDays className="mr-1.5 h-4 w-4" /> Jadwalkan Konsultasi
+                </Button>
+                {profile?.phone && (
+                  <a
+                    href={getWhatsAppUrlForPatient() || "#"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
+                  >
+                    <Phone className="mr-1 h-4 w-4" /> Kirim Hasil ke WhatsApp Saya
+                  </a>
+                )}
+                <a
+                  href={getWhatsAppUrlForClinic() || "#"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-md bg-teal-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-teal-700 transition-colors"
+                >
+                  <Phone className="mr-1 h-4 w-4" /> Kirim Hasil ke WhatsApp Klinik
+                </a>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setAnswers({});
+                    setIsSubmitted(false);
+                  }}
+                >
+                  Ulangi Skrening
+                </Button>
+              </div>
+            </Card>
+          )}
+        </>
       )}
     </div>
   );

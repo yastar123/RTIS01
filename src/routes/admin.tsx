@@ -77,6 +77,7 @@ type AdminScreeningItem = {
   maxScore: number;
   level: string;
   advice: string;
+  aiReport?: string | null;
   createdAt: string;
   userEmail: string | null;
   fullName: string | null;
@@ -1991,7 +1992,18 @@ function ScreeningDetailModal({
   item: AdminScreeningItem;
   onClose: () => void;
 }) {
-  const [aiReport, setAiReport] = useState<TcmAiReport | null>(null);
+  const [aiReport, setAiReport] = useState<TcmAiReport | null>(() => {
+    if (item.aiReport) {
+      try {
+        const parsed =
+          typeof item.aiReport === "string" ? JSON.parse(item.aiReport) : item.aiReport;
+        if (parsed && typeof parsed === "object") return parsed;
+      } catch (e) {
+        console.error("Gagal parse initial aiReport di modal:", e);
+      }
+    }
+    return null;
+  });
   const [isLoadingAi, setIsLoadingAi] = useState(false);
   const [aiError, setAiError] = useState("");
 
@@ -2003,7 +2015,20 @@ function ScreeningDetailModal({
     console.error("Gagal parse jawaban modal:", e);
   }
 
-  const generateReport = async () => {
+  const generateReport = async (force = false) => {
+    if (!force && item.aiReport) {
+      try {
+        const parsed =
+          typeof item.aiReport === "string" ? JSON.parse(item.aiReport) : item.aiReport;
+        if (parsed && typeof parsed === "object") {
+          setAiReport(parsed);
+          return;
+        }
+      } catch (e) {
+        console.error("Error parsing stored aiReport:", e);
+      }
+    }
+
     setIsLoadingAi(true);
     setAiError("");
     try {
@@ -2031,12 +2056,14 @@ function ScreeningDetailModal({
           answers: parsedAnswers,
           patientProfile,
           basicResults,
+          screeningResultId: item.id,
         }),
       });
 
       if (!res.ok) throw new Error("Gagal menghasilkan analisa holistik AI TCM.");
       const data = await res.json();
       setAiReport(data);
+      item.aiReport = JSON.stringify(data);
     } catch (err) {
       setAiError(err instanceof Error ? err.message : "Gagal memuat AI report.");
     } finally {
@@ -2045,8 +2072,20 @@ function ScreeningDetailModal({
   };
 
   useEffect(() => {
+    if (item.aiReport) {
+      try {
+        const parsed =
+          typeof item.aiReport === "string" ? JSON.parse(item.aiReport) : item.aiReport;
+        if (parsed && typeof parsed === "object") {
+          setAiReport(parsed);
+          return;
+        }
+      } catch (e) {
+        console.error("Error parsing stored aiReport:", e);
+      }
+    }
     void generateReport();
-  }, [item.id]);
+  }, [item.id, item.aiReport]);
 
   return (
     <Dialog open onOpenChange={() => onClose()}>

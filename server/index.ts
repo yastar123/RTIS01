@@ -286,6 +286,11 @@ app.put("/api/profile/screening", async (req, res) => {
       address,
       tonguePhotoUrl,
       screeningAnswers,
+      score,
+      maxScore,
+      level,
+      advice,
+      aiReport,
     } = req.body;
 
     const db = getDb();
@@ -294,6 +299,11 @@ app.put("/api/profile/screening", async (req, res) => {
       .from(profiles)
       .where(eq(profiles.userId, user.id))
       .limit(1);
+
+    const answersStr =
+      typeof screeningAnswers === "string"
+        ? screeningAnswers
+        : JSON.stringify(screeningAnswers || {});
 
     const updateData = {
       fullName: fullName ?? existing?.fullName ?? "",
@@ -304,8 +314,7 @@ app.put("/api/profile/screening", async (req, res) => {
       phone: phone ?? existing?.phone ?? "",
       address: address ?? existing?.address ?? "",
       tonguePhotoUrl: tonguePhotoUrl ?? existing?.tonguePhotoUrl ?? null,
-      screeningAnswers:
-        typeof screeningAnswers === "string" ? screeningAnswers : JSON.stringify(screeningAnswers),
+      screeningAnswers: answersStr,
       screeningCompletedAt: new Date(),
       updatedAt: new Date(),
     };
@@ -327,6 +336,26 @@ app.put("/api/profile/screening", async (req, res) => {
         .returning();
     }
 
+    // Save to screeningResults table as well so history is tracked
+    if (screeningAnswers) {
+      const aiReportStr = aiReport
+        ? typeof aiReport === "string"
+          ? aiReport
+          : JSON.stringify(aiReport)
+        : null;
+
+      await db.insert(screeningResults).values({
+        userId: user.id,
+        answers: answersStr,
+        score: score !== undefined ? Number(score) : 0,
+        maxScore: maxScore !== undefined ? Number(maxScore) : 100,
+        level: level || "Rendah",
+        advice: advice || "",
+        aiReport: aiReportStr,
+        createdAt: new Date(),
+      });
+    }
+
     res.json(updated);
   } catch (error) {
     res.status(500).json({
@@ -340,7 +369,7 @@ app.post("/api/profile/screening-results", async (req, res) => {
     const user = await requireUser(req, res);
     if (!user) return;
 
-    const { answers, score, maxScore, level, advice } = req.body;
+    const { answers, score, maxScore, level, advice, aiReport } = req.body;
     if (
       answers === undefined ||
       score === undefined ||
@@ -353,6 +382,11 @@ app.post("/api/profile/screening-results", async (req, res) => {
 
     const db = getDb();
     const answersStr = typeof answers === "string" ? answers : JSON.stringify(answers);
+    const aiReportStr = aiReport
+      ? typeof aiReport === "string"
+        ? aiReport
+        : JSON.stringify(aiReport)
+      : null;
 
     // Save to screening_results table
     const [inserted] = await db
@@ -364,6 +398,7 @@ app.post("/api/profile/screening-results", async (req, res) => {
         maxScore: Number(maxScore),
         level,
         advice,
+        aiReport: aiReportStr,
         createdAt: new Date(),
       })
       .returning();
@@ -416,7 +451,17 @@ app.get("/api/profile/screening-results", async (req, res) => {
 
     const db = getDb();
     const results = await db
-      .select()
+      .select({
+        id: screeningResults.id,
+        userId: screeningResults.userId,
+        answers: screeningResults.answers,
+        score: screeningResults.score,
+        maxScore: screeningResults.maxScore,
+        level: screeningResults.level,
+        advice: screeningResults.advice,
+        aiReport: screeningResults.aiReport,
+        createdAt: screeningResults.createdAt,
+      })
       .from(screeningResults)
       .where(eq(screeningResults.userId, user.id))
       .orderBy(desc(screeningResults.createdAt));
@@ -429,9 +474,28 @@ app.get("/api/profile/screening-results", async (req, res) => {
   }
 });
 
+app.patch("/api/screening-results/:id/ai-report", async (req, res) => {
+  try {
+    const { aiReport } = req.body;
+    if (!aiReport) return res.status(400).json({ message: "Data AI report diperlukan." });
+    const db = getDb();
+    const aiReportStr = typeof aiReport === "string" ? aiReport : JSON.stringify(aiReport);
+    await db
+      .update(screeningResults)
+      .set({ aiReport: aiReportStr })
+      .where(eq(screeningResults.id, req.params.id));
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({
+      message: error instanceof Error ? error.message : "Gagal menyimpan AI report ke database.",
+    });
+  }
+});
+
 app.post("/api/screening/generate-ai-analysis", async (req, res) => {
   try {
-    const { answers, questions, patientProfile, basicResults } = req.body;
+    const { answers, questions, patientProfile, basicResults, screeningResultId } = req.body;
     if (!answers || typeof answers !== "object") {
       return res.status(400).json({ message: "Data jawaban kuesioner diperlukan." });
     }
@@ -442,6 +506,19 @@ app.post("/api/screening/generate-ai-analysis", async (req, res) => {
       patientProfile,
       basicResults,
     });
+
+    if (screeningResultId) {
+      try {
+        const db = getDb();
+        const aiReportStr = JSON.stringify(aiReport);
+        await db
+          .update(screeningResults)
+          .set({ aiReport: aiReportStr })
+          .where(eq(screeningResults.id, screeningResultId));
+      } catch (e) {
+        console.error("Gagal simpan aiReport ke db saat generate:", e);
+      }
+    }
 
     res.json(aiReport);
   } catch (error) {
@@ -896,6 +973,7 @@ app.get("/api/admin/screenings", async (req, res) => {
         maxScore: screeningResults.maxScore,
         level: screeningResults.level,
         advice: screeningResults.advice,
+        aiReport: screeningResults.aiReport,
         createdAt: screeningResults.createdAt,
         userEmail: users.email,
         fullName: profiles.fullName,
