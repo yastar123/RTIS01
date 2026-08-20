@@ -31,6 +31,7 @@ import {
   RefreshCw,
   CheckCircle2,
   AlertTriangle,
+  Printer,
 } from "lucide-react";
 import { useAuth, authHeaders } from "@/hooks/use-auth";
 import { TcmHerbalReport, type TcmAiReport } from "@/components/screening/TcmHerbalReport";
@@ -2217,8 +2218,16 @@ function ScreeningDetailModal({
           </div>
         </div>
 
-        <DialogFooter className="pt-4 border-t mt-4 flex flex-col sm:flex-row gap-2">
-          <Button variant="outline" onClick={onClose} className="text-xs">
+        <DialogFooter className="pt-4 border-t mt-4 flex flex-col sm:flex-row justify-between items-center gap-2">
+          <Button
+            type="button"
+            onClick={() => window.print()}
+            className="w-full sm:w-auto bg-neutral-900 text-white text-xs gap-1.5 hover:bg-neutral-800"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            <span>Cetak / Unduh Dokumen PDF</span>
+          </Button>
+          <Button variant="outline" onClick={onClose} className="w-full sm:w-auto text-xs">
             Tutup
           </Button>
         </DialogFooter>

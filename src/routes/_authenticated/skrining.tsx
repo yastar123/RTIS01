@@ -22,6 +22,13 @@ import {
   Instagram,
   User,
   ExternalLink,
+  Paperclip,
+  UploadCloud,
+  Trash2,
+  Eye,
+  Download,
+  Loader2,
+  Video,
 } from "lucide-react";
 import { TcmHerbalReport, TcmAiReport } from "@/components/screening/TcmHerbalReport";
 
@@ -42,6 +49,16 @@ export const Route = createFileRoute("/_authenticated/skrining")({
 interface ScreeningQuestion {
   id: string;
   questionText: string;
+}
+
+export interface MedicalDocumentItem {
+  id: string;
+  name: string;
+  type: string;
+  url: string;
+  size?: string;
+  note?: string;
+  uploadedAt?: string;
 }
 
 // 48 TCM Zang-Fu Syndromes described by the user
@@ -274,6 +291,11 @@ function Skrining() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Hospital documents state
+  const [hospitalDocs, setHospitalDocs] = useState<MedicalDocumentItem[]>([]);
+  const [isUploadingHospitalDoc, setIsUploadingHospitalDoc] = useState(false);
+  const hospitalFileInputRef = useRef<HTMLInputElement | null>(null);
+
   // Profile query
   const { data: profile } = useProfile();
 
@@ -290,14 +312,9 @@ function Skrining() {
   const [aiReport, setAiReport] = useState<TcmAiReport | null>(null);
   const [isLoadingAi, setIsLoadingAi] = useState(false);
 
-  // Shared Screening and Broadcast States
+  // Shared Screening States
   const [isViewingShared, setIsViewingShared] = useState(false);
   const [isSavingScreening, setIsSavingScreening] = useState(false);
-  const [recipientPhone, setRecipientPhone] = useState("");
-  const [whatsappSettings, setWhatsappSettings] = useState<{
-    whatsappNumber: string;
-    whatsappMessageTemplate: string;
-  } | null>(null);
 
   const fetchQuestions = async () => {
     setLoading(true);
@@ -321,16 +338,6 @@ function Skrining() {
     void fetchQuestions();
   }, []);
 
-  // Fetch settings for WhatsApp broadcast
-  useEffect(() => {
-    fetch("/api/settings")
-      .then((res) => res.json())
-      .then((data) => {
-        setWhatsappSettings(data);
-      })
-      .catch((err) => console.error("Error fetching settings:", err));
-  }, []);
-
   // Handle loading shared screening result on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -349,6 +356,9 @@ function Skrining() {
           setBerat(decoded.berat ? String(decoded.berat) : "60");
           setKeluhan(decoded.keluhan || "");
           setTonguePhoto(decoded.tonguePhoto || "");
+          if (decoded.hospitalDocs && Array.isArray(decoded.hospitalDocs)) {
+            setHospitalDocs(decoded.hospitalDocs);
+          }
           setJawaban(decoded.answers || {});
           setStep("result");
           setSubmitted(true);
@@ -466,6 +476,53 @@ function Skrining() {
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleHospitalDocUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploadingHospitalDoc(true);
+    const fileArray = Array.from(files);
+    let processedCount = 0;
+
+    fileArray.forEach((file) => {
+      const sizeKB = (file.size / 1024).toFixed(0);
+      const formattedSize =
+        file.size > 1024 * 1024 ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : `${sizeKB} KB`;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          const newDoc: MedicalDocumentItem = {
+            id: `doc_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            name: file.name,
+            type: file.type || "application/octet-stream",
+            url: event.target.result as string,
+            size: formattedSize,
+            note: "",
+            uploadedAt: new Date().toISOString(),
+          };
+          setHospitalDocs((prev) => [...prev, newDoc]);
+        }
+        processedCount++;
+        if (processedCount === fileArray.length) {
+          setIsUploadingHospitalDoc(false);
+          if (hospitalFileInputRef.current) {
+            hospitalFileInputRef.current.value = "";
+          }
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleRemoveHospitalDoc = (id: string) => {
+    setHospitalDocs((prev) => prev.filter((d) => d.id !== id));
+  };
+
+  const handleDocNoteChange = (id: string, note: string) => {
+    setHospitalDocs((prev) => prev.map((d) => (d.id === id ? { ...d, note } : d)));
   };
 
   // TCM Calculations Engine
@@ -884,7 +941,9 @@ function Skrining() {
             tinggi,
             berat,
             tonguePhoto,
+            hospitalDocs,
           },
+          hospitalDocs,
           score: calcResults.score,
           maxScore: calcResults.maxScore,
           level: calcResults.level,
@@ -925,38 +984,6 @@ function Skrining() {
 
   const triggerPrint = () => {
     window.print();
-  };
-
-  const getWhatsAppShareUrl = (phoneNum: string) => {
-    if (!whatsappSettings) return "";
-    let template =
-      whatsappSettings.whatsappMessageTemplate ||
-      "Halo [nama],\n\nBerikut adalah hasil skrining TCM Anda. Silakan klik link berikut untuk melihat detail analisis holistik Anda:\n\n[link]\n\nTerima kasih,\nRumah Terapy Ikhtiar Sehat";
-
-    const resultPayload = {
-      nama,
-      usia,
-      kelamin,
-      tinggi,
-      berat,
-      keluhan,
-      tonguePhoto,
-      answers: jawaban,
-    };
-    const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
-    const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}`;
-
-    template = template.replace("[nama]", nama || "Pasien");
-    template = template.replace("[link]", reportUrl);
-
-    let cleaned = phoneNum.replace(/[^0-9]/g, "");
-    if (cleaned.startsWith("0")) {
-      cleaned = "62" + cleaned.substring(1);
-    } else if (cleaned.startsWith("8")) {
-      cleaned = "62" + cleaned;
-    }
-
-    return `https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(template)}`;
   };
 
   return (
@@ -1289,6 +1316,106 @@ function Skrining() {
                     </div>
                   )}
                 </div>
+
+                {/* Optional Hospital Medical Documents / Lab Results Upload */}
+                <div className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="block text-sm font-semibold text-neutral-800 flex items-center gap-1.5">
+                        <Paperclip className="h-4 w-4 text-primary" />
+                        Lampiran Dokumen Medis &amp; Lab Rumah Sakit (Opsional)
+                      </span>
+                      <span className="block text-xs text-neutral-500 mt-0.5">
+                        Unggah foto/file rontgen, hasil lab darah, EKG, atau resume dokter rumah
+                        sakit.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => hospitalFileInputRef.current?.click()}
+                      disabled={isUploadingHospitalDoc}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-neutral-50 px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-100 transition-colors"
+                    >
+                      <UploadCloud className="h-3.5 w-3.5 text-primary" />
+                      <span>{isUploadingHospitalDoc ? "Mengunggah..." : "Tambah Dokumen"}</span>
+                    </button>
+                  </div>
+
+                  <input
+                    type="file"
+                    ref={hospitalFileInputRef}
+                    onChange={handleHospitalDocUpload}
+                    multiple
+                    accept="image/*,application/pdf,.doc,.docx"
+                    className="hidden"
+                  />
+
+                  {hospitalDocs.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      {hospitalDocs.map((doc) => {
+                        const isImage =
+                          doc.type.startsWith("image/") || doc.url.startsWith("data:image/");
+                        return (
+                          <div
+                            key={doc.id}
+                            className="rounded-xl border border-neutral-200 bg-neutral-50/70 p-3 flex flex-col justify-between gap-2"
+                          >
+                            <div className="flex items-start gap-2.5">
+                              {isImage ? (
+                                <img
+                                  src={doc.url}
+                                  alt={doc.name}
+                                  className="h-12 w-12 rounded-lg object-cover border border-neutral-200 shrink-0 bg-white"
+                                />
+                              ) : (
+                                <div className="h-12 w-12 rounded-lg border border-neutral-200 bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                                  <FileText className="h-6 w-6" />
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p
+                                  className="text-xs font-bold text-neutral-900 truncate"
+                                  title={doc.name}
+                                >
+                                  {doc.name}
+                                </p>
+                                <span className="text-[10px] text-neutral-400 font-mono block">
+                                  {doc.size || "File"} •{" "}
+                                  {doc.type.split("/")[1]?.toUpperCase() || "DOC"}
+                                </span>
+                                <input
+                                  type="text"
+                                  placeholder="Catatan / keterangan dokumen..."
+                                  value={doc.note || ""}
+                                  onChange={(e) => handleDocNoteChange(doc.id, e.target.value)}
+                                  className="mt-1.5 w-full rounded border border-neutral-200 bg-white px-2 py-1 text-[11px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-primary"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveHospitalDoc(doc.id)}
+                                className="text-neutral-400 hover:text-red-600 transition-colors p-1"
+                                title="Hapus dokumen"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => hospitalFileInputRef.current?.click()}
+                      className="rounded-xl border border-dashed border-neutral-200 p-4 text-center cursor-pointer hover:bg-neutral-50/50 transition-colors"
+                    >
+                      <FileText className="h-6 w-6 text-neutral-300 mx-auto mb-1" />
+                      <p className="text-xs font-medium text-neutral-500">
+                        Klik untuk memilih dokumen hasil lab/resume medis RS (opsional)
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <button
@@ -1318,81 +1445,6 @@ function Skrining() {
           className="print-container mx-auto max-w-5xl px-4 py-8 sm:py-14"
           id="tcm-screening-report"
         >
-          {/* WHATSAPP BROADCAST SECTION */}
-          {whatsappSettings && (
-            <div className="no-print mb-6 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-6 shadow-xs">
-              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 text-emerald-800 font-bold">
-                    <div className="rounded-full bg-emerald-100 p-1.5 text-emerald-600">
-                      <Phone className="h-4 w-4" />
-                    </div>
-                    <span className="font-display">Kirim Hasil Skrining via WhatsApp</span>
-                  </div>
-                  <p className="text-xs text-emerald-950/70">
-                    Kirimkan link laporan resmi analisa holistik TCM ini secara instan ke nomor
-                    WhatsApp pasien.
-                  </p>
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                  <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-xs text-muted-foreground font-mono">
-                      No. HP:
-                    </span>
-                    <input
-                      type="text"
-                      placeholder="Masukkan No. HP Pasien"
-                      value={recipientPhone}
-                      onChange={(e) => setRecipientPhone(e.target.value)}
-                      className="rounded-full border border-neutral-300 bg-white pl-16 pr-4 py-2 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary w-full sm:w-56"
-                    />
-                  </div>
-                  <a
-                    href={getWhatsAppShareUrl(recipientPhone)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-1.5 rounded-full bg-emerald-600 px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition-colors"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    Kirim Hasil Ke WhatsApp
-                  </a>
-                </div>
-              </div>
-
-              <div className="mt-4 border-t border-emerald-100/50 pt-3">
-                <details className="group">
-                  <summary className="flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-emerald-800 select-none group-open:mb-2">
-                    <span className="underline decoration-dashed">
-                      Lihat Preview Pesan Broadcast
-                    </span>
-                  </summary>
-                  <div className="rounded-lg bg-white p-3 border border-emerald-100/40 text-xs text-neutral-700 font-mono whitespace-pre-wrap leading-relaxed shadow-xs">
-                    {(() => {
-                      const resultPayload = {
-                        nama,
-                        usia,
-                        kelamin,
-                        tinggi,
-                        berat,
-                        keluhan,
-                        tonguePhoto,
-                        answers: jawaban,
-                      };
-                      const encodedPayload = btoa(
-                        encodeURIComponent(JSON.stringify(resultPayload)),
-                      );
-                      const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}`;
-                      return whatsappSettings.whatsappMessageTemplate
-                        ?.replace("[nama]", nama || "Pasien")
-                        ?.replace("[link]", reportUrl);
-                    })()}
-                  </div>
-                </details>
-              </div>
-            </div>
-          )}
-
           {/* Main Card Report Wrap */}
           <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-md sm:p-10">
             {/* BRAND LOGO BAR */}
@@ -1439,107 +1491,228 @@ function Skrining() {
             </div>
 
             {/* DEMOGRAPHICS GRID */}
-            <div className="mt-8 grid grid-cols-1 gap-4 rounded-xl border border-neutral-200 bg-neutral-50/50 p-6 sm:grid-cols-4">
-              <div>
-                <span className="block text-[11px] font-bold uppercase tracking-wider text-neutral-400">
-                  Nama
-                </span>
-                <span className="mt-1 block font-display text-base font-bold text-neutral-900">
-                  {nama || "Pasien Rumah Terapy"}
-                </span>
-              </div>
-              <div>
-                <span className="block text-[11px] font-bold uppercase tracking-wider text-neutral-400">
-                  Usia & Kelamin
-                </span>
-                <span className="mt-1 block font-display text-base font-bold text-neutral-900">
-                  {usia} Th, {kelamin === "L" ? "Laki-laki (L)" : "Perempuan (P)"}
-                </span>
-              </div>
-              <div>
-                <span className="block text-[11px] font-bold uppercase tracking-wider text-neutral-400">
-                  Fisik
-                </span>
-                <span className="mt-1 block font-display text-base font-bold text-neutral-900">
-                  {tinggi} cm / {berat} kg
-                </span>
-              </div>
-              <div>
-                <span className="block text-[11px] font-bold uppercase tracking-wider text-neutral-400">
-                  Tanggal Analisa
-                </span>
-                <span className="mt-1 block font-display text-base font-bold text-neutral-900">
-                  {new Date().toLocaleDateString("id-ID", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </span>
-              </div>
-            </div>
+            {(() => {
+              const hM = (parseFloat(tinggi) || 165) / 100;
+              const wKg = parseFloat(berat) || 60;
+              const bmiVal = hM > 0 ? (wKg / (hM * hM)).toFixed(1) : "22.0";
+              const bmiNum = parseFloat(bmiVal);
+              const bmiCategory =
+                bmiNum < 18.5
+                  ? "Kurus (Underweight)"
+                  : bmiNum < 24.9
+                    ? "Normal"
+                    : bmiNum < 29.9
+                      ? "Kelebihan Berat"
+                      : "Obesitas";
+
+              return (
+                <div className="mt-8 grid grid-cols-2 gap-4 rounded-xl border border-neutral-200 bg-neutral-50/70 p-5 sm:grid-cols-4 print:bg-white print:border-neutral-300">
+                  <div>
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-neutral-400">
+                      Nama Pasien
+                    </span>
+                    <span className="mt-0.5 block font-display text-base font-bold text-neutral-900">
+                      {nama || "Pasien Rumah Terapy"}
+                    </span>
+                    <span className="text-[10px] text-neutral-500 font-mono">
+                      ID: #
+                      {Math.abs(
+                        (nama || "PT")
+                          .split("")
+                          .reduce((a, b) => (a << 5) - a + b.charCodeAt(0), 0),
+                      )
+                        .toString()
+                        .substring(0, 6)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-neutral-400">
+                      Usia &amp; Kelamin
+                    </span>
+                    <span className="mt-0.5 block font-display text-base font-bold text-neutral-900">
+                      {usia} Tahun, {kelamin === "L" ? "Laki-laki (L)" : "Perempuan (P)"}
+                    </span>
+                    <span className="text-[10px] text-neutral-500">
+                      Peran: {user?.role === "admin" ? "Admin / Praktisi" : "Pasien"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-neutral-400">
+                      Fisik &amp; BMI
+                    </span>
+                    <span className="mt-0.5 block font-display text-base font-bold text-neutral-900">
+                      {tinggi} cm / {berat} kg
+                    </span>
+                    <span className="text-[10px] font-medium text-primary">
+                      BMI: {bmiVal} ({bmiCategory})
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-neutral-400">
+                      Tanggal &amp; Waktu
+                    </span>
+                    <span className="mt-0.5 block font-display text-base font-bold text-neutral-900">
+                      {new Date().toLocaleDateString("id-ID", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </span>
+                    <span className="text-[10px] text-neutral-500">
+                      {new Date().toLocaleTimeString("id-ID", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}{" "}
+                      WIB
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* REASON/COMPLAINT */}
-            <div className="mt-4 rounded-xl border border-neutral-200 bg-white p-6">
-              <span className="block text-[11px] font-bold uppercase tracking-wider text-neutral-400">
-                Keluhan Utama Pasien
+            <div className="mt-4 rounded-xl border border-neutral-200 bg-white p-5 print:border-neutral-300">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-neutral-400">
+                Keluhan Utama Pasien (Anamnesis)
               </span>
-              <p className="mt-1.5 text-sm font-medium text-neutral-800 leading-relaxed italic">
-                "{keluhan || "Tidak ada keluhan tertulis"}"
+              <p className="mt-1 text-xs sm:text-sm font-medium text-neutral-800 leading-relaxed italic">
+                "{keluhan || "Tidak ada catatan keluhan khusus"}"
               </p>
             </div>
 
-            {/* TONGUE PHOTO DISPLAY */}
-            <div className="mt-6 rounded-xl border border-neutral-200 bg-neutral-50/50 p-6">
-              <span className="block text-[11px] font-bold uppercase tracking-wider text-neutral-400">
-                Foto Lidah
-              </span>
-              <span className="block text-xs text-neutral-500 mt-0.5">
-                Dokumentasi kondisi lidah pasien
-              </span>
+            {/* TONGUE PHOTO & MEDICAL DOCUMENTS SECTION */}
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* TONGUE PHOTO DISPLAY */}
+              <div className="rounded-xl border border-neutral-200 bg-neutral-50/50 p-5 print:bg-white print:border-neutral-300">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-neutral-400">
+                  Foto Lidah Pasien (She Zhen / 舌诊)
+                </span>
+                <span className="block text-xs text-neutral-500 mt-0.5">
+                  Dokumentasi lidah untuk pemetaan sindrom Zang-Fu
+                </span>
 
-              <div className="mt-4 flex flex-col items-center sm:flex-row gap-6">
-                {tonguePhoto ? (
-                  <div className="relative">
-                    <img
-                      src={tonguePhoto}
-                      alt="Lidah Pasien"
-                      className="h-32 w-32 rounded-lg border object-cover shadow-xs"
-                      referrerPolicy="no-referrer"
-                    />
-                    <div className="absolute -bottom-2 -right-2 rounded-full bg-primary p-1 text-white shadow-md">
-                      <CheckCircle className="h-4 w-4" />
+                <div className="mt-3 flex items-center gap-4">
+                  {tonguePhoto ? (
+                    <div className="relative shrink-0">
+                      <img
+                        src={tonguePhoto}
+                        alt="Lidah Pasien"
+                        className="h-28 w-28 rounded-lg border border-neutral-300 object-cover shadow-2xs"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute -bottom-1.5 -right-1.5 rounded-full bg-primary p-0.5 text-white shadow-xs">
+                        <CheckCircle className="h-3.5 w-3.5" />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex h-28 w-28 shrink-0 flex-col items-center justify-center rounded-lg border-2 border-dashed border-neutral-300 bg-white text-center text-[10px] p-2 text-neutral-400">
+                      <ImageIcon className="h-5 w-5 mb-1 text-neutral-300" />
+                      Belum ada foto lidah
+                    </div>
+                  )}
+                  <div className="flex-1 text-xs text-neutral-600 leading-relaxed">
+                    <p className="line-clamp-2">
+                      Kondisi permukaan, warna tubuh lidah, dan selaput lidah (Taizi) mencerminkan
+                      kondisi cairan dan energi organ dalam.
+                    </p>
+                    <div className="mt-2.5 flex flex-wrap gap-2 no-print">
+                      <button
+                        type="button"
+                        onClick={startCamera}
+                        className="flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-neutral-700 hover:bg-neutral-50"
+                      >
+                        <Camera className="h-3 w-3" />
+                        Kamera
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-neutral-700 hover:bg-neutral-50"
+                      >
+                        <ImageIcon className="h-3 w-3" />
+                        Galeri
+                      </button>
                     </div>
                   </div>
-                ) : (
-                  <div className="flex h-32 w-32 flex-col items-center justify-center rounded-lg border-2 border-dashed border-neutral-300 bg-white text-center text-xs p-3 text-neutral-400">
-                    <ImageIcon className="h-6 w-6 mb-1 text-neutral-300" />
-                    Belum ada foto lidah. Upload sekarang?
+                </div>
+              </div>
+
+              {/* HOSPITAL DOCUMENTS DISPLAY */}
+              <div className="rounded-xl border border-neutral-200 bg-neutral-50/50 p-5 print:bg-white print:border-neutral-300">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1">
+                      <Paperclip className="h-3 w-3 text-primary" />
+                      Lampiran Dokumen Medis &amp; Lab RS
+                    </span>
+                    <span className="block text-xs text-neutral-500 mt-0.5">
+                      {hospitalDocs.length > 0
+                        ? `${hospitalDocs.length} berkas medis terlampir`
+                        : "Tidak ada dokumen medis tambahan"}
+                    </span>
                   </div>
-                )}
-                <div className="flex-1 no-print w-full">
-                  <p className="text-xs text-neutral-600 leading-relaxed">
-                    Kondisi permukaan lidah adalah jendela utama organ internal dalam diagnosa
-                    holistik TCM. Anda dapat mengunggah foto lidah Anda menggunakan tombol di bawah
-                    ini.
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={startCamera}
-                      className="flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50"
-                    >
-                      <Camera className="h-3 w-3" />
-                      Kamera
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50"
-                    >
-                      <ImageIcon className="h-3 w-3" />
-                      Galeri
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => hospitalFileInputRef.current?.click()}
+                    className="no-print inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline"
+                  >
+                    + Tambah
+                  </button>
+                </div>
+
+                <div className="mt-3 space-y-2 max-h-36 overflow-y-auto pr-1">
+                  {hospitalDocs.length > 0 ? (
+                    hospitalDocs.map((doc) => {
+                      const isImg =
+                        doc.type.startsWith("image/") || doc.url.startsWith("data:image/");
+                      return (
+                        <div
+                          key={doc.id}
+                          className="flex items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-white p-2 text-xs"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            {isImg ? (
+                              <img
+                                src={doc.url}
+                                alt={doc.name}
+                                className="h-7 w-7 rounded object-cover border shrink-0"
+                              />
+                            ) : (
+                              <div className="h-7 w-7 rounded bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                                <FileText className="h-4 w-4" />
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <p
+                                className="font-semibold text-neutral-900 truncate text-[11px]"
+                                title={doc.name}
+                              >
+                                {doc.name}
+                              </p>
+                              {doc.note && (
+                                <p className="text-[10px] text-neutral-500 italic truncate">
+                                  {doc.note}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <a
+                            href={doc.url}
+                            download={doc.name}
+                            className="text-primary hover:text-primary-dark shrink-0 p-1 no-print"
+                            title="Unduh file"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </a>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="flex h-24 flex-col items-center justify-center rounded-lg border border-dashed border-neutral-300 bg-white/70 text-center text-neutral-400 p-2">
+                      <FileText className="h-5 w-5 mb-1 text-neutral-300" />
+                      <span className="text-[11px]">Belum ada rontgen/lab terlampir</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1622,8 +1795,8 @@ function Skrining() {
                       </span>
                     </div>
 
-                    {/* Question Items */}
-                    <div className="space-y-3 pt-2">
+                    {/* Question Items (Interactive Paginated for Screen) */}
+                    <div className="space-y-3 pt-2 no-print">
                       {paginatedHistoryQuestions.map((q, idx) => {
                         const globalIdx = (historyQuestionsPage - 1) * historyPerPage + idx;
                         const answerVal = jawaban[q.id];
@@ -1670,6 +1843,59 @@ function Skrining() {
                           </div>
                         );
                       })}
+                    </div>
+
+                    {/* Full Question Breakdown (For Clean PDF / Print Export) */}
+                    <div className="hidden print:block print-avoid-break mt-4">
+                      <table className="w-full border-collapse text-left text-[10pt]">
+                        <thead>
+                          <tr className="border-b-2 border-neutral-300 bg-neutral-100/70">
+                            <th className="py-2 px-3 font-bold text-neutral-800 w-12 text-center">
+                              No
+                            </th>
+                            <th className="py-2 px-3 font-bold text-neutral-800">
+                              Pertanyaan Skrening
+                            </th>
+                            <th className="py-2 px-3 font-bold text-neutral-800 w-44 text-center">
+                              Respon Pasien
+                            </th>
+                            <th className="py-2 px-3 font-bold text-neutral-800 w-16 text-center">
+                              Skor
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-neutral-200">
+                          {questions.map((q, qIdx) => {
+                            const val = jawaban[q.id] ?? 0;
+                            const label =
+                              val === 0
+                                ? "Tidak pernah"
+                                : val === 1
+                                  ? "Kadang-kadang"
+                                  : val === 2
+                                    ? "Sering"
+                                    : "Selalu";
+                            return (
+                              <tr key={q.id} className={qIdx % 2 === 1 ? "bg-neutral-50/50" : ""}>
+                                <td className="py-1.5 px-3 font-mono text-center font-bold text-neutral-500">
+                                  {qIdx + 1}
+                                </td>
+                                <td className="py-1.5 px-3 text-neutral-800 font-medium leading-tight">
+                                  {q.questionText}
+                                </td>
+                                <td className="py-1.5 px-3 text-center">
+                                  <span className="inline-block px-2 py-0.5 rounded font-semibold text-[9pt] border border-neutral-300">
+                                    {label}
+                                  </span>
+                                </td>
+                                <td className="py-1.5 px-3 text-center font-bold text-primary">
+                                  {val}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
 
                     {/* Pagination Controls */}
@@ -1725,6 +1951,7 @@ function Skrining() {
               onRefreshAi={() => requestAiAnalysis()}
               results={results}
               dominant={dominant}
+              isAdmin={user?.role === "admin"}
               getActiveSyndromesString={getActiveSyndromesString}
               getKeluhanUtamaManifestasi={getKeluhanUtamaManifestasi}
               getTop3OrgansString={getTop3OrgansString}
@@ -1735,12 +1962,47 @@ function Skrining() {
             />
 
             {/* DISCLAIMER TEXT */}
-            <div className="mt-10 border-t pt-8 text-[11px] text-neutral-500 leading-relaxed bg-neutral-50 p-5 rounded-xl border border-neutral-200">
+            <div className="mt-10 border-t pt-8 text-[11px] text-neutral-500 leading-relaxed bg-neutral-50 p-5 rounded-xl border border-neutral-200 print:bg-white print:border-neutral-300">
               <strong>Disclaimer:</strong> Hasil ini merupakan Profiling Traditional Chinese
               Medicine (TCM) berdasarkan jawaban kuesioner. Hasil ini bertujuan sebagai informasi
               awal mengenai kecenderungan kondisi tubuh menurut konsep TCM dan tidak merupakan
               diagnosis medis. Apabila memiliki keluhan kesehatan, konsultasikan dengan praktisi TCM
               atau tenaga kesehatan yang kompeten.
+            </div>
+
+            {/* SINSHE & CLINIC SIGNATURE BOX (PRINT ONLY) */}
+            <div className="hidden print:block print-avoid-break mt-8 pt-4 border-t border-neutral-300">
+              <div className="grid grid-cols-2 gap-8 text-center text-[10pt]">
+                <div>
+                  <p className="font-semibold text-neutral-600">Pasien / Wali Pasien,</p>
+                  <div className="h-20 flex items-end justify-center">
+                    <div className="w-48 border-b border-neutral-400"></div>
+                  </div>
+                  <p className="mt-2 font-bold text-neutral-900">{nama || "Pasien"}</p>
+                  <p className="text-[9pt] text-neutral-500">Tanda Tangan &amp; Nama Terang</p>
+                </div>
+                <div>
+                  <p className="font-semibold text-neutral-600">
+                    Surabaya,{" "}
+                    {new Date().toLocaleDateString("id-ID", {
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </p>
+                  <p className="text-[9pt] text-neutral-500 font-medium">
+                    Praktisi TCM / Sinshe Pemeriksa,
+                  </p>
+                  <div className="h-16 flex items-center justify-center">
+                    <div className="rounded-full border border-dashed border-primary/40 px-3 py-1 text-[8pt] text-primary font-bold uppercase tracking-widest">
+                      Cap Resmi Rumah Terapy
+                    </div>
+                  </div>
+                  <div className="w-48 mx-auto border-b border-neutral-400"></div>
+                  <p className="mt-2 font-bold text-neutral-900">Sinshe / Tim Terapis TCM</p>
+                  <p className="text-[9pt] text-neutral-500">Rumah Terapy Ikhtiar Sehat</p>
+                </div>
+              </div>
             </div>
 
             {/* ACTION FOOTER BUTTONS */}

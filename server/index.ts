@@ -398,6 +398,7 @@ app.post("/api/profile/screening-results", async (req, res) => {
       answers: cleanAnswers,
       complaints: req.body.complaints || "",
       tonguePhotoUrl: req.body.tonguePhotoUrl || null,
+      hospitalDocs: Array.isArray(req.body.hospitalDocs) ? req.body.hospitalDocs : [],
     };
     const answersStr = JSON.stringify(answersPayload);
     const aiReportStr = aiReport
@@ -1011,6 +1012,7 @@ app.get("/api/admin/screenings", async (req, res) => {
     const results = rows.map((r) => {
       let complaints = "";
       let tonguePhotoUrl = r.tonguePhotoUrl;
+      let hospitalDocs: unknown[] = [];
       try {
         const parsed = typeof r.answers === "string" ? JSON.parse(r.answers) : r.answers;
         if (parsed && typeof parsed === "object") {
@@ -1026,6 +1028,12 @@ app.get("/api/admin/screenings", async (req, res) => {
               (parsed as { tonguePhotoUrl?: string; tonguePhoto?: string }).tonguePhotoUrl ||
               (parsed as { tonguePhotoUrl?: string; tonguePhoto?: string }).tonguePhoto ||
               tonguePhotoUrl;
+          }
+          if (
+            "hospitalDocs" in parsed &&
+            Array.isArray((parsed as { hospitalDocs?: unknown[] }).hospitalDocs)
+          ) {
+            hospitalDocs = (parsed as { hospitalDocs: unknown[] }).hospitalDocs;
           }
         }
       } catch {
@@ -1043,6 +1051,13 @@ app.get("/api/admin/screenings", async (req, res) => {
                 (parsed as { complaints?: string; keluhan?: string }).keluhan ||
                 "",
             );
+            if (
+              hospitalDocs.length === 0 &&
+              "hospitalDocs" in parsed &&
+              Array.isArray((parsed as { hospitalDocs?: unknown[] }).hospitalDocs)
+            ) {
+              hospitalDocs = (parsed as { hospitalDocs: unknown[] }).hospitalDocs;
+            }
           }
         } catch {
           // ignore
@@ -1052,6 +1067,7 @@ app.get("/api/admin/screenings", async (req, res) => {
         ...r,
         complaints: complaints || "-",
         tonguePhotoUrl,
+        hospitalDocs,
       };
     });
 

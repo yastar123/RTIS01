@@ -18,6 +18,7 @@ import {
   Target,
   Zap,
   Crosshair,
+  Printer,
 } from "lucide-react";
 import { calculateTcmResult, getDominantConstitution, createTcmReportHelpers } from "@/lib/tcm";
 
@@ -131,6 +132,7 @@ interface TcmHerbalReportProps {
   answers?: Record<string, number>;
   keluhan?: string;
   isAdmin?: boolean;
+  onDownloadPdf?: () => void;
   getActiveSyndromesString?: () => string;
   getKeluhanUtamaManifestasi?: () => string;
   getTop3OrgansString?: () => string;
@@ -149,6 +151,7 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
   answers = {},
   keluhan,
   isAdmin = false,
+  onDownloadPdf,
   getActiveSyndromesString: propGetActiveSyndromesString,
   getKeluhanUtamaManifestasi: propGetKeluhanUtamaManifestasi,
   getTop3OrgansString: propGetTop3OrgansString,
@@ -206,17 +209,34 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
           </div>
         </div>
 
-        {onRefreshAi && (
+        <div className="flex flex-wrap items-center gap-2 no-print shrink-0">
+          {onRefreshAi && (
+            <button
+              type="button"
+              onClick={onRefreshAi}
+              disabled={isLoadingAi}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 shadow-2xs transition-all disabled:opacity-50"
+            >
+              <RotateCcw className={`h-3.5 w-3.5 ${isLoadingAi ? "animate-spin" : ""}`} />
+              {isLoadingAi ? "Menganalisis..." : "Perbarui Analisa AI"}
+            </button>
+          )}
           <button
             type="button"
-            onClick={onRefreshAi}
-            disabled={isLoadingAi}
-            className="no-print inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 shadow-2xs transition-all disabled:opacity-50"
+            onClick={() => {
+              if (onDownloadPdf) {
+                onDownloadPdf();
+              } else {
+                window.print();
+              }
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-900 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-neutral-800 shadow-2xs transition-all"
+            title="Cetak atau simpan laporan lengkap dalam bentuk dokumen PDF"
           >
-            <RotateCcw className={`h-3.5 w-3.5 ${isLoadingAi ? "animate-spin" : ""}`} />
-            {isLoadingAi ? "Menganalisis..." : "Perbarui Analisa AI"}
+            <Printer className="h-3.5 w-3.5" />
+            <span>Cetak / Unduh PDF</span>
           </button>
-        )}
+        </div>
       </div>
 
       {/* 1. HIGH PRIORITY WARNING BOX */}
@@ -390,122 +410,125 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
         )}
       </div>
 
-      {/* 4. HERBAL INDONESIA (JAMU & SIMPLISIA NUSANTARA) */}
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white">
-              <Leaf className="h-4 w-4" />
-            </div>
-            <div>
-              <h3 className="font-display text-base sm:text-lg font-bold text-emerald-950">
-                Rekomendasi formulasi Herbal Tradisional Indonesia
-              </h3>
-              <p className="text-xs text-emerald-700">
-                Simplisia &amp; Jamu Nusantara yang cocok dengan profil sindrom TCM Anda.
-              </p>
-            </div>
-          </div>
-          <span className="hidden sm:inline-block rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800">
-            Jamu &amp; Fitofarmaka
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {(report?.herbalIndonesia && report.herbalIndonesia.length > 0
-            ? report.herbalIndonesia
-            : [
-                {
-                  namaIndonesia: "Temulawak",
-                  namaLatin: "Curcuma xanthorrhiza",
-                  sifatRasa: "Hangat, Sedikit Pahit dan Manis",
-                  targetOrgan: "Limpa, Lambung, Hati",
-                  khasiatTcm:
-                    "Menguatkan energi Limpa (Jian Pi), melancarkan empedu, dan membuang kelembapan internal.",
-                  caraPengolahan:
-                    "Iris 15g temulawak segar, rebus dengan 2 gelas air hingga tersisa 1 gelas.",
-                  anjuranKonsumsi: "1 kali sehari hangat sebelum makan.",
-                  catatanPeringatan: "Sangat baik untuk perut kembung & begah.",
-                },
-                {
-                  namaIndonesia: "Jahe Merah",
-                  namaLatin: "Zingiber officinale var. rubrum",
-                  sifatRasa: "Panas / Hangat, Pedas Menyegarkan",
-                  targetOrgan: "Limpa, Lambung, Paru-paru",
-                  khasiatTcm:
-                    "Menghangatkan Yang tubuh (Wen Yang), mengusir dingin (San Han), dan meredakan mual kembung.",
-                  caraPengolahan:
-                    "Memarkan 1 ruas jahe merah, seduh air panas 200ml bersama madu murni.",
-                  anjuranKonsumsi: "1 gelas pagi atau sore hari saat cuaca dingin.",
-                  catatanPeringatan: "Hindari jika tenggorokan terasa panas atau sariawan.",
-                },
-                {
-                  namaIndonesia: "Kunyit",
-                  namaLatin: "Curcuma longa",
-                  sifatRasa: "Hangat, Pedas dan Sedikit Pahit",
-                  targetOrgan: "Hati, Limpa",
-                  khasiatTcm:
-                    "Melancarkan sirkulasi Qi & darah (Xing Qi Huo Xue), meredakan radang lambung.",
-                  caraPengolahan:
-                    "Parut 2 ruas kunyit, peras dengan 100ml air hangat dan 1 sdt madu.",
-                  anjuranKonsumsi: "Diminum 1 kali sehari setelah makan.",
-                  catatanPeringatan: "Mendukung regenerasi mukosa lambung.",
-                },
-                {
-                  namaIndonesia: "Kayu Manis",
-                  namaLatin: "Cinnamomum verum",
-                  sifatRasa: "Hangat / Panas, Manis Pedas",
-                  targetOrgan: "Ginjal, Limpa, Jantung",
-                  khasiatTcm:
-                    "Menghangatkan Yang Ginjal, memperlancar meridian, menstabilkan metabolisme.",
-                  caraPengolahan: "Seduh 1 batang kecil ke dalam rebusan jahe atau teh herbal.",
-                  anjuranKonsumsi: "2-3 kali seminggu bersama ramuan hangat.",
-                  catatanPeringatan: "Gunakan secukupnya sebagai herbal penghangat.",
-                },
-              ]
-          ).map((herb, idx) => (
-            <div
-              key={idx}
-              className="rounded-xl border border-emerald-200/80 bg-white p-4.5 shadow-2xs space-y-3 flex flex-col justify-between"
-            >
+      {/* 4. HERBAL INDONESIA (JAMU & SIMPLISIA NUSANTARA) - KHUSUS ADMIN */}
+      {isAdmin && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white">
+                <Leaf className="h-4 w-4" />
+              </div>
               <div>
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h4 className="font-display text-base font-bold text-emerald-950 leading-tight">
-                      {herb.namaIndonesia}
-                    </h4>
-                    <p className="text-[11px] italic text-emerald-700 font-serif">
-                      {herb.namaLatin}
+                <h3 className="font-display text-base sm:text-lg font-bold text-emerald-950">
+                  Rekomendasi formulasi Herbal Tradisional Indonesia
+                </h3>
+                <p className="text-xs text-emerald-700">
+                  Simplisia &amp; Jamu Nusantara yang cocok dengan profil sindrom TCM Anda (Khusus
+                  Admin / Praktisi).
+                </p>
+              </div>
+            </div>
+            <span className="hidden sm:inline-block rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
+              Khusus Admin / Terapis
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {(report?.herbalIndonesia && report.herbalIndonesia.length > 0
+              ? report.herbalIndonesia
+              : [
+                  {
+                    namaIndonesia: "Temulawak",
+                    namaLatin: "Curcuma xanthorrhiza",
+                    sifatRasa: "Hangat, Sedikit Pahit dan Manis",
+                    targetOrgan: "Limpa, Lambung, Hati",
+                    khasiatTcm:
+                      "Menguatkan energi Limpa (Jian Pi), melancarkan empedu, dan membuang kelembapan internal.",
+                    caraPengolahan:
+                      "Iris 15g temulawak segar, rebus dengan 2 gelas air hingga tersisa 1 gelas.",
+                    anjuranKonsumsi: "1 kali sehari hangat sebelum makan.",
+                    catatanPeringatan: "Sangat baik untuk perut kembung & begah.",
+                  },
+                  {
+                    namaIndonesia: "Jahe Merah",
+                    namaLatin: "Zingiber officinale var. rubrum",
+                    sifatRasa: "Panas / Hangat, Pedas Menyegarkan",
+                    targetOrgan: "Limpa, Lambung, Paru-paru",
+                    khasiatTcm:
+                      "Menghangatkan Yang tubuh (Wen Yang), mengusir dingin (San Han), dan meredakan mual kembung.",
+                    caraPengolahan:
+                      "Memarkan 1 ruas jahe merah, seduh air panas 200ml bersama madu murni.",
+                    anjuranKonsumsi: "1 gelas pagi atau sore hari saat cuaca dingin.",
+                    catatanPeringatan: "Hindari jika tenggorokan terasa panas atau sariawan.",
+                  },
+                  {
+                    namaIndonesia: "Kunyit",
+                    namaLatin: "Curcuma longa",
+                    sifatRasa: "Hangat, Pedas dan Sedikit Pahit",
+                    targetOrgan: "Hati, Limpa",
+                    khasiatTcm:
+                      "Melancarkan sirkulasi Qi & darah (Xing Qi Huo Xue), meredakan radang lambung.",
+                    caraPengolahan:
+                      "Parut 2 ruas kunyit, peras dengan 100ml air hangat dan 1 sdt madu.",
+                    anjuranKonsumsi: "Diminum 1 kali sehari setelah makan.",
+                    catatanPeringatan: "Mendukung regenerasi mukosa lambung.",
+                  },
+                  {
+                    namaIndonesia: "Kayu Manis",
+                    namaLatin: "Cinnamomum verum",
+                    sifatRasa: "Hangat / Panas, Manis Pedas",
+                    targetOrgan: "Ginjal, Limpa, Jantung",
+                    khasiatTcm:
+                      "Menghangatkan Yang Ginjal, memperlancar meridian, menstabilkan metabolisme.",
+                    caraPengolahan: "Seduh 1 batang kecil ke dalam rebusan jahe atau teh herbal.",
+                    anjuranKonsumsi: "2-3 kali seminggu bersama ramuan hangat.",
+                    catatanPeringatan: "Gunakan secukupnya sebagai herbal penghangat.",
+                  },
+                ]
+            ).map((herb, idx) => (
+              <div
+                key={idx}
+                className="rounded-xl border border-emerald-200/80 bg-white p-4.5 shadow-2xs space-y-3 flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h4 className="font-display text-base font-bold text-emerald-950 leading-tight">
+                        {herb.namaIndonesia}
+                      </h4>
+                      <p className="text-[11px] italic text-emerald-700 font-serif">
+                        {herb.namaLatin}
+                      </p>
+                    </div>
+                    <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
+                      {herb.sifatRasa}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 space-y-1.5 text-xs text-neutral-700 leading-relaxed">
+                    <p>
+                      <strong className="text-neutral-900">Meridian / Organ:</strong>{" "}
+                      {herb.targetOrgan}
+                    </p>
+                    <p>
+                      <strong className="text-neutral-900">Khasiat TCM:</strong> {herb.khasiatTcm}
+                    </p>
+                    <p className="bg-emerald-50/60 p-2 rounded-md border border-emerald-100 text-[11px]">
+                      <strong className="text-emerald-900">Cara Olah:</strong> {herb.caraPengolahan}
                     </p>
                   </div>
-                  <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
-                    {herb.sifatRasa}
+                </div>
+
+                <div className="border-t border-neutral-100 pt-2 flex items-center justify-between text-[10px] text-neutral-500">
+                  <span>
+                    <strong>Anjuran:</strong> {herb.anjuranKonsumsi}
                   </span>
                 </div>
-
-                <div className="mt-3 space-y-1.5 text-xs text-neutral-700 leading-relaxed">
-                  <p>
-                    <strong className="text-neutral-900">Meridian / Organ:</strong>{" "}
-                    {herb.targetOrgan}
-                  </p>
-                  <p>
-                    <strong className="text-neutral-900">Khasiat TCM:</strong> {herb.khasiatTcm}
-                  </p>
-                  <p className="bg-emerald-50/60 p-2 rounded-md border border-emerald-100 text-[11px]">
-                    <strong className="text-emerald-900">Cara Olah:</strong> {herb.caraPengolahan}
-                  </p>
-                </div>
               </div>
-
-              <div className="border-t border-neutral-100 pt-2 flex items-center justify-between text-[10px] text-neutral-500">
-                <span>
-                  <strong>Anjuran:</strong> {herb.anjuranKonsumsi}
-                </span>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 5. HERBAL CHINA (TRADITIONAL CHINESE MEDICINE FORMULA) */}
       <div className="rounded-xl border border-amber-200 bg-amber-50/30 p-6 space-y-4">

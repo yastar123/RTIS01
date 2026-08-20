@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   ArrowRight,
   BookOpen,
+  Building2,
   Calendar,
   CalendarDays,
   Camera,
@@ -19,8 +20,11 @@ import {
   Clock,
   ExternalLink,
   Eye,
+  FileSpreadsheet,
   FileText,
+  Files,
   Filter,
+  FolderPlus,
   Globe,
   History,
   Image as ImageIcon,
@@ -31,6 +35,7 @@ import {
   Menu,
   PanelLeft,
   PanelLeftClose,
+  Paperclip,
   Pencil,
   Phone,
   PhoneCall,
@@ -2669,6 +2674,16 @@ interface ScreeningQuestion {
   sortOrder: number;
 }
 
+export interface MedicalDocumentItem {
+  id: string;
+  name: string;
+  type: string;
+  url: string;
+  size?: string;
+  note?: string;
+  uploadedAt?: string;
+}
+
 interface ScreeningResultHistory {
   id: string;
   userId: string;
@@ -2698,6 +2713,7 @@ interface AdminScreeningItem {
   age: number | null;
   tonguePhotoUrl: string | null;
   complaints: string | null;
+  hospitalDocs?: MedicalDocumentItem[];
 }
 
 function AdminScreeningDetailView({
@@ -2962,6 +2978,78 @@ function AdminScreeningDetailView({
             />
           </div>
         )}
+
+        {/* Lampiran Dokumen & Foto Rumah Sakit */}
+        {(() => {
+          let docs: MedicalDocumentItem[] = [];
+          if (item.hospitalDocs && Array.isArray(item.hospitalDocs)) {
+            docs = item.hospitalDocs;
+          } else {
+            try {
+              const parsed =
+                typeof item.answers === "string" ? JSON.parse(item.answers) : item.answers;
+              if (parsed && typeof parsed === "object" && Array.isArray(parsed.hospitalDocs)) {
+                docs = parsed.hospitalDocs;
+              }
+            } catch {
+              // ignore
+            }
+          }
+          if (docs.length === 0) return null;
+
+          return (
+            <div className="pt-3 border-t space-y-2">
+              <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Building2 className="h-3.5 w-3.5 text-primary" />
+                Dokumen & Rekam Medis Rumah Sakit ({docs.length} File Terlampir):
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {docs.map((doc, idx) => (
+                  <div
+                    key={doc.id || idx}
+                    className="flex items-center gap-2.5 p-2 rounded-lg border bg-background text-xs shadow-2xs"
+                  >
+                    {doc.type?.includes("pdf") || doc.name?.endsWith(".pdf") ? (
+                      <div className="h-10 w-10 shrink-0 rounded bg-rose-50 text-rose-600 flex flex-col items-center justify-center font-bold text-[10px] border border-rose-200">
+                        <FileText className="h-4 w-4" />
+                        <span>PDF</span>
+                      </div>
+                    ) : (
+                      <img
+                        src={doc.url}
+                        alt={doc.name}
+                        className="h-10 w-10 shrink-0 rounded object-cover border"
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-foreground truncate">{doc.name}</p>
+                      {doc.note && (
+                        <p className="text-[11px] text-muted-foreground line-clamp-1 italic">
+                          "{doc.note}"
+                        </p>
+                      )}
+                      {doc.size && (
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          {doc.size}
+                        </span>
+                      )}
+                    </div>
+                    <a
+                      href={doc.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download={doc.name}
+                      className="p-1.5 rounded-md hover:bg-muted text-primary shrink-0"
+                      title="Buka / Unduh Dokumen"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Assessment Summary Header */}
@@ -3190,6 +3278,12 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
   const [tonguePhoto, setTonguePhoto] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<"photo" | "video">("photo");
 
+  // Hospital & Medical Document state
+  const [hospitalDocs, setHospitalDocs] = useState<MedicalDocumentItem[]>([]);
+  const hospitalFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isUploadingHospitalDoc, setIsUploadingHospitalDoc] = useState(false);
+  const [previewHospitalDoc, setPreviewHospitalDoc] = useState<MedicalDocumentItem | null>(null);
+
   // Camera & Gallery Upload Refs
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -3222,6 +3316,13 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
             if (storedTongue && !tonguePhoto) {
               setTonguePhoto(storedTongue);
             }
+            if (
+              parsed.hospitalDocs &&
+              Array.isArray(parsed.hospitalDocs) &&
+              hospitalDocs.length === 0
+            ) {
+              setHospitalDocs(parsed.hospitalDocs);
+            }
           }
         } catch {
           // ignore
@@ -3230,6 +3331,60 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
       if (profile.tonguePhotoUrl && !tonguePhoto) setTonguePhoto(profile.tonguePhotoUrl);
     }
   }, [profile]);
+
+  // Hospital document upload handlers
+  const handleHospitalDocUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploadingHospitalDoc(true);
+    const fileArray = Array.from(files);
+    let processedCount = 0;
+
+    fileArray.forEach((file) => {
+      const sizeKB = (file.size / 1024).toFixed(0);
+      const formattedSize =
+        file.size > 1024 * 1024 ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : `${sizeKB} KB`;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          const newDoc: MedicalDocumentItem = {
+            id: `doc_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            name: file.name,
+            type: file.type || "application/octet-stream",
+            url: event.target.result as string,
+            size: formattedSize,
+            note: "",
+            uploadedAt: new Date().toISOString(),
+          };
+          setHospitalDocs((prev) => [...prev, newDoc]);
+        }
+        processedCount++;
+        if (processedCount === fileArray.length) {
+          setIsUploadingHospitalDoc(false);
+          if (hospitalFileInputRef.current) {
+            hospitalFileInputRef.current.value = "";
+          }
+        }
+      };
+      reader.onerror = () => {
+        processedCount++;
+        if (processedCount === fileArray.length) {
+          setIsUploadingHospitalDoc(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleRemoveHospitalDoc = (id: string) => {
+    setHospitalDocs((prev) => prev.filter((doc) => doc.id !== id));
+  };
+
+  const handleUpdateHospitalDocNote = (id: string, note: string) => {
+    setHospitalDocs((prev) => prev.map((doc) => (doc.id === id ? { ...doc, note } : doc)));
+  };
 
   // Webcam camera handlers
   const startCamera = async () => {
@@ -3332,6 +3487,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
         weight: profile?.weight || 60,
         complaints: complaints || "",
         tonguePhoto: tonguePhoto || profile?.tonguePhotoUrl || "",
+        hospitalDocs: hospitalDocs || [],
       };
 
       const calculatedResults = calculateTcmResult(answersToUse, questions.length);
@@ -3410,6 +3566,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
       berat: profile?.weight || 60,
       keluhan: complaints || "",
       tonguePhoto: profile?.tonguePhotoUrl || tonguePhoto || "",
+      hospitalDocs: hospitalDocs || [],
       answers: answersToUse,
     };
     const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
@@ -3590,6 +3747,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
       berat: profile?.weight || 60,
       keluhan: complaints || "",
       tonguePhoto: tonguePhoto || profile?.tonguePhotoUrl || "",
+      hospitalDocs: hospitalDocs || [],
       answers: answers,
     };
     const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
@@ -3622,6 +3780,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
       berat: profile?.weight || 60,
       keluhan: complaints || "",
       tonguePhoto: tonguePhoto || profile?.tonguePhotoUrl || "",
+      hospitalDocs: hospitalDocs || [],
       answers: answers,
     };
     const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
@@ -3656,6 +3815,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
           aiReport: aiReport ? JSON.stringify(aiReport) : null,
           tonguePhotoUrl: tonguePhoto,
           complaints: complaints,
+          hospitalDocs: hospitalDocs,
         }),
       });
 
@@ -4348,6 +4508,8 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                 {(() => {
                   let parsedAnswers: Record<string, number> = {};
                   let itemKeluhan = "";
+                  let itemTongue = "";
+                  let itemDocs: MedicalDocumentItem[] = [];
                   try {
                     const raw =
                       typeof selectedHistoryItem.answers === "string"
@@ -4356,6 +4518,10 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                     if (raw && typeof raw === "object" && "answers" in raw) {
                       parsedAnswers = raw.answers || {};
                       itemKeluhan = raw.complaints || raw.keluhan || "";
+                      itemTongue = raw.tonguePhotoUrl || raw.tonguePhoto || "";
+                      if (Array.isArray(raw.hospitalDocs)) {
+                        itemDocs = raw.hospitalDocs;
+                      }
                     } else {
                       parsedAnswers = raw || {};
                     }
@@ -4367,7 +4533,89 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                   const helpers = createTcmReportHelpers(parsedAnswers, calcRes, itemKeluhan);
 
                   return (
-                    <div className="border-t pt-6 space-y-4 text-left">
+                    <div className="border-t pt-6 space-y-6 text-left">
+                      {/* Attached media preview */}
+                      {(itemTongue || itemDocs.length > 0 || itemKeluhan) && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-muted/20 p-4 rounded-xl border">
+                          {itemKeluhan && (
+                            <div className="md:col-span-2 space-y-1">
+                              <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                                <FileText className="h-3.5 w-3.5 text-primary" /> Keluhan yang
+                                Dilaporkan:
+                              </span>
+                              <p className="text-xs text-muted-foreground bg-background p-3 rounded-lg border leading-relaxed">
+                                {itemKeluhan}
+                              </p>
+                            </div>
+                          )}
+
+                          {itemTongue && (
+                            <div className="space-y-1.5">
+                              <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                                <Camera className="h-3.5 w-3.5 text-primary" /> Foto Lidah:
+                              </span>
+                              <div className="h-28 w-28 rounded-lg overflow-hidden border bg-background">
+                                <img
+                                  src={itemTongue}
+                                  alt="Foto Lidah"
+                                  className="h-full w-full object-cover"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {itemDocs.length > 0 && (
+                            <div className={`${itemTongue ? "" : "md:col-span-2"} space-y-2`}>
+                              <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                                <Building2 className="h-3.5 w-3.5 text-primary" /> Dokumen Rumah
+                                Sakit ({itemDocs.length}):
+                              </span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {itemDocs.map((doc, idx) => (
+                                  <div
+                                    key={doc.id || idx}
+                                    className="flex items-center gap-2 p-2 rounded-lg border bg-background text-xs"
+                                  >
+                                    {doc.type?.includes("pdf") || doc.name?.endsWith(".pdf") ? (
+                                      <div className="h-9 w-9 shrink-0 rounded bg-rose-50 text-rose-600 flex flex-col items-center justify-center font-bold text-[9px] border border-rose-200">
+                                        <FileText className="h-3.5 w-3.5" />
+                                        <span>PDF</span>
+                                      </div>
+                                    ) : (
+                                      <img
+                                        src={doc.url}
+                                        alt={doc.name}
+                                        className="h-9 w-9 shrink-0 rounded object-cover border"
+                                      />
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-medium text-foreground truncate">
+                                        {doc.name}
+                                      </p>
+                                      {doc.note && (
+                                        <p className="text-[10px] text-muted-foreground truncate italic">
+                                          "{doc.note}"
+                                        </p>
+                                      )}
+                                    </div>
+                                    <a
+                                      href={doc.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      download={doc.name}
+                                      className="p-1 rounded text-primary hover:bg-muted shrink-0"
+                                      title="Lihat / Download"
+                                    >
+                                      <ExternalLink className="h-3.5 w-3.5" />
+                                    </a>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <TcmHerbalReport
                         report={aiReport}
                         isLoadingAi={isLoadingAi}
@@ -4376,6 +4624,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                         dominant={domConst}
                         answers={parsedAnswers}
                         keluhan={itemKeluhan}
+                        isAdmin={isAdmin}
                         getActiveSyndromesString={helpers.getActiveSyndromesString}
                         getKeluhanUtamaManifestasi={helpers.getKeluhanUtamaManifestasi}
                         getTop3OrgansString={helpers.getTop3OrgansString}
@@ -4871,6 +5120,167 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                     </CardContent>
                   </Card>
 
+                  {/* UPLOAD FOTO & DOKUMEN MEDIS / RUMAH SAKIT */}
+                  <Card className="bg-card shadow-xs">
+                    <CardHeader className="p-4 sm:p-5 pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                          <Building2 className="h-4 w-4 text-primary" />
+                          Upload Foto / Dokumen Rumah Sakit (Opsional)
+                        </CardTitle>
+                        <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                          Opsional
+                        </Badge>
+                      </div>
+                      <CardDescription className="text-xs">
+                        Lampirkan dokumen riwayat kesehatan seperti Hasil Lab, Rekam Medis, Foto
+                        Rontgen, USG, Surat/Rujukan Dokter, atau Resep Obat untuk membantu AI &
+                        Terapis memahami kondisi medis Anda secara komprehensif.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-4 sm:p-5 pt-0 space-y-4">
+                      {/* Hidden File Input for Hospital Documents */}
+                      <input
+                        ref={hospitalFileInputRef}
+                        type="file"
+                        multiple
+                        accept="image/*,application/pdf"
+                        onChange={handleHospitalDocUpload}
+                        className="hidden"
+                      />
+
+                      {/* Upload Button Dropzone */}
+                      <div className="flex flex-col sm:flex-row items-center gap-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => hospitalFileInputRef.current?.click()}
+                          disabled={isUploadingHospitalDoc}
+                          className="w-full sm:w-auto h-auto py-3 px-5 flex items-center justify-center gap-2.5 border-dashed border-2 border-primary/40 hover:border-primary hover:bg-primary/5 transition-all text-xs font-semibold text-foreground"
+                        >
+                          {isUploadingHospitalDoc ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                          ) : (
+                            <FolderPlus className="h-4 w-4 text-primary" />
+                          )}
+                          <span>+ Pilih Foto / Dokumen Medis</span>
+                        </Button>
+                        <span className="text-[11px] text-muted-foreground text-center sm:text-left">
+                          Format yang didukung: <strong>Gambar (JPG, PNG, WEBP)</strong> &{" "}
+                          <strong>PDF</strong> (bisa pilih beberapa file).
+                        </span>
+                      </div>
+
+                      {/* Uploaded Documents List */}
+                      {hospitalDocs.length > 0 && (
+                        <div className="space-y-3 pt-2">
+                          <div className="flex items-center justify-between text-xs font-semibold text-foreground">
+                            <span>Daftar Dokumen Terlampir ({hospitalDocs.length}):</span>
+                            <span className="text-[11px] text-muted-foreground font-normal">
+                              Beri keterangan untuk memperjelas jenis pemeriksaan
+                            </span>
+                          </div>
+
+                          <div className="space-y-2.5">
+                            {hospitalDocs.map((doc, index) => (
+                              <div
+                                key={doc.id || index}
+                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl border bg-muted/20 hover:bg-muted/30 transition-colors"
+                              >
+                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                  {/* Icon / Thumbnail */}
+                                  {doc.type?.includes("pdf") || doc.name?.endsWith(".pdf") ? (
+                                    <div className="h-11 w-11 shrink-0 rounded-lg bg-rose-50 border border-rose-200 text-rose-600 flex flex-col items-center justify-center font-bold text-[10px]">
+                                      <FileText className="h-5 w-5" />
+                                      <span>PDF</span>
+                                    </div>
+                                  ) : (
+                                    <div
+                                      onClick={() => setPreviewHospitalDoc(doc)}
+                                      className="h-11 w-11 shrink-0 rounded-lg overflow-hidden border bg-background cursor-pointer hover:opacity-80 transition-opacity"
+                                      title="Klik untuk pratinjau"
+                                    >
+                                      <img
+                                        src={doc.url}
+                                        alt={doc.name}
+                                        className="h-full w-full object-cover"
+                                      />
+                                    </div>
+                                  )}
+
+                                  {/* Details & Note Input */}
+                                  <div className="min-w-0 flex-1 space-y-1">
+                                    <div className="flex items-center gap-2">
+                                      <p className="font-semibold text-xs text-foreground truncate">
+                                        {doc.name}
+                                      </p>
+                                      {doc.size && (
+                                        <Badge
+                                          variant="secondary"
+                                          className="text-[9px] px-1.5 py-0 h-4 shrink-0 font-mono"
+                                        >
+                                          {doc.size}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <Input
+                                      type="text"
+                                      placeholder="Tambahkan catatan (cth: Hasil Lab Kolesterol 10 Jan 2025, Rontgen Paru)"
+                                      value={doc.note || ""}
+                                      onChange={(e) =>
+                                        handleUpdateHospitalDocNote(doc.id, e.target.value)
+                                      }
+                                      className="h-7 text-[11px] bg-background"
+                                    />
+                                  </div>
+                                </div>
+
+                                {/* Actions */}
+                                <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      if (doc.type?.includes("pdf") || doc.name?.endsWith(".pdf")) {
+                                        window.open(doc.url, "_blank");
+                                      } else {
+                                        setPreviewHospitalDoc(doc);
+                                      }
+                                    }}
+                                    className="h-7 text-xs px-2.5 gap-1 text-primary hover:bg-primary/10"
+                                    title="Pratinjau Dokumen"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" />
+                                    <span>Lihat</span>
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRemoveHospitalDoc(doc.id)}
+                                    className="h-7 text-xs px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                    title="Hapus Dokumen"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="bg-muted/40 border rounded-lg p-2.5 text-[11px] text-muted-foreground flex items-center gap-2">
+                        <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+                        <span>
+                          Data dan dokumen medis Anda bersifat rahasia dan hanya digunakan untuk
+                          kepentingan konsultasi dan analisa terapi kesehatan.
+                        </span>
+                      </div>
+                    </CardContent>
+                  </Card>
+
                   {/* Navigation Buttons for Step 2 */}
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t">
                     <Button
@@ -5014,6 +5424,61 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                             </Badge>
                           )}
                         </div>
+
+                        {/* Ringkasan Dokumen Rumah Sakit */}
+                        <div className="pt-2 border-t space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">
+                              Dokumen Rumah Sakit / Medis:
+                            </span>
+                            {hospitalDocs.length > 0 ? (
+                              <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
+                                {hospitalDocs.length} Dokumen Dilampirkan
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className="text-muted-foreground text-[10px]"
+                              >
+                                Tidak Ada (Opsional)
+                              </Badge>
+                            )}
+                          </div>
+
+                          {hospitalDocs.length > 0 && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {hospitalDocs.map((doc, idx) => (
+                                <div
+                                  key={doc.id || idx}
+                                  className="flex items-center gap-2 p-2 rounded-lg border bg-background text-xs"
+                                >
+                                  {doc.type?.includes("pdf") || doc.name?.endsWith(".pdf") ? (
+                                    <div className="h-8 w-8 shrink-0 rounded bg-rose-50 text-rose-600 flex flex-col items-center justify-center font-bold text-[8px] border border-rose-200">
+                                      <FileText className="h-3.5 w-3.5" />
+                                      <span>PDF</span>
+                                    </div>
+                                  ) : (
+                                    <img
+                                      src={doc.url}
+                                      alt={doc.name}
+                                      className="h-8 w-8 shrink-0 rounded object-cover border"
+                                    />
+                                  )}
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-foreground truncate text-[11px]">
+                                      {doc.name}
+                                    </p>
+                                    {doc.note && (
+                                      <p className="text-[10px] text-muted-foreground truncate italic">
+                                        "{doc.note}"
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </CardContent>
                     </Card>
                   </div>
@@ -5029,7 +5494,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                       className="w-full sm:w-auto gap-2"
                     >
                       <ArrowLeft className="h-4 w-4" />
-                      Kembali ke Tahap 2 (Foto Lidah)
+                      Kembali ke Tahap 2 (Foto Lidah & Dokumen)
                     </Button>
 
                     <Button
@@ -5094,6 +5559,74 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                   </div>
                 </DialogContent>
               </Dialog>
+
+              {/* PREVIEW HOSPITAL DOCUMENT DIALOG */}
+              <Dialog
+                open={!!previewHospitalDoc}
+                onOpenChange={(open) => !open && setPreviewHospitalDoc(null)}
+              >
+                <DialogContent className="max-w-2xl p-5">
+                  <DialogHeader>
+                    <DialogTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-primary" />
+                      Pratinjau Dokumen Medis: {previewHospitalDoc?.name}
+                    </DialogTitle>
+                    {previewHospitalDoc?.note && (
+                      <DialogDescription className="text-xs italic text-foreground/80">
+                        Catatan: {previewHospitalDoc.note}
+                      </DialogDescription>
+                    )}
+                  </DialogHeader>
+
+                  <div className="space-y-4">
+                    <div className="rounded-xl overflow-hidden border bg-muted/20 flex items-center justify-center max-h-[70vh]">
+                      {previewHospitalDoc?.type?.includes("pdf") ||
+                      previewHospitalDoc?.name?.endsWith(".pdf") ? (
+                        <div className="p-8 text-center space-y-3">
+                          <FileText className="h-16 w-16 text-rose-500 mx-auto" />
+                          <p className="text-xs text-muted-foreground">
+                            Dokumen PDF dapat dibuka atau diunduh di tab baru.
+                          </p>
+                          <Button
+                            onClick={() =>
+                              previewHospitalDoc && window.open(previewHospitalDoc.url, "_blank")
+                            }
+                            className="text-xs gap-1.5"
+                          >
+                            <ExternalLink className="h-4 w-4" /> Buka PDF di Tab Baru
+                          </Button>
+                        </div>
+                      ) : (
+                        <img
+                          src={previewHospitalDoc?.url}
+                          alt={previewHospitalDoc?.name}
+                          className="max-h-[65vh] w-auto object-contain rounded-lg shadow-xs"
+                        />
+                      )}
+                    </div>
+
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setPreviewHospitalDoc(null)}
+                        className="text-xs"
+                      >
+                        Tutup
+                      </Button>
+                      <a
+                        href={previewHospitalDoc?.url}
+                        download={previewHospitalDoc?.name}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors"
+                      >
+                        <Download className="h-3.5 w-3.5" /> Download Dokumen
+                      </a>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
           ) : (
             <Card className="bg-card p-5 sm:p-8 shadow-xs text-center space-y-6">
@@ -5153,6 +5686,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                       dominant={domConst}
                       answers={answers}
                       keluhan={complaints}
+                      isAdmin={isAdmin}
                       getActiveSyndromesString={helpers.getActiveSyndromesString}
                       getKeluhanUtamaManifestasi={helpers.getKeluhanUtamaManifestasi}
                       getTop3OrgansString={helpers.getTop3OrgansString}

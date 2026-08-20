@@ -1,3 +1,11 @@
+export interface HospitalDocItem {
+  id?: string;
+  name: string;
+  type?: string;
+  note?: string;
+  url?: string;
+}
+
 export interface PatientScreeningInput {
   answers: Record<string, number>;
   questions?: Array<{ id: string; questionText: string }>;
@@ -9,6 +17,7 @@ export interface PatientScreeningInput {
     weight?: number | string;
     complaints?: string;
     tonguePhoto?: string | null;
+    hospitalDocs?: HospitalDocItem[];
   };
   basicResults?: {
     totalScore?: number;
@@ -566,6 +575,16 @@ export async function generateOpenRouterTcmAnalysis(
     const patientComplaints =
       input.patientProfile?.complaints || "Tidak ada keluhan spesifik tertulis.";
     const hasTonguePhoto = Boolean(input.patientProfile?.tonguePhoto);
+    const hospitalDocs = input.patientProfile?.hospitalDocs || [];
+    const hospitalDocsSummary =
+      hospitalDocs.length > 0
+        ? hospitalDocs
+            .map(
+              (doc, i) =>
+                `  ${i + 1}. [${doc.name || "Dokumen/Foto RS"}] ${doc.note ? `Keterangan/Catatan Pasien: "${doc.note}"` : "Terlampir hasil laboratorium / rekam medis rumah sakit"}`,
+            )
+            .join("\n")
+        : "Tidak ada lampiran dokumen/foto rumah sakit tambahan.";
 
     const questionsList = (input.questions || [])
       .map((q, idx) => {
@@ -595,6 +614,8 @@ DATA PASIEN & ANAMNESIS LANGKAH 2:
 - Tinggi Badan: ${input.patientProfile?.height || "-"} cm, Berat: ${input.patientProfile?.weight || "-"} kg
 - Keluhan Utama & Keterangan Rinci Pasien (Langkah 2): "${patientComplaints}"
 - Lampiran Foto/Video Lidah (Langkah 2): ${hasTonguePhoto ? "Pasien mengunggah foto/video sampel lidah untuk pengamatan Lidah (She Zhen)" : "Tidak ada foto lidah"}
+- Lampiran Dokumen/Foto Rumah Sakit (Hasil Lab, Rekam Medis, Rujukan Dokter) (Langkah 2):
+${hospitalDocsSummary}
 
 DAFTAR JAWABAN KUESIONER SKRINING PASIEN (LANGKAH 1):
 ${questionsList || JSON.stringify(input.answers)}
