@@ -282,7 +282,8 @@ function Skrining() {
   const [jawaban, setJawaban] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [submitted, setSubmitted] = useState(false);
-  const [step, setStep] = useState<"profile" | "questions" | "result">("profile");
+  const [step, setStep] = useState<"questions" | "detail" | "result">("questions");
+  const [mediaType, setMediaType] = useState<"image" | "video">("image");
   const [historyQuestionsPage, setHistoryQuestionsPage] = useState(1);
 
   // AI Generated TCM & Herbal State
@@ -388,16 +389,21 @@ function Skrining() {
     }
   }, []);
 
-  // Sync profile phone number
+  // Sync profile data when available
   useEffect(() => {
-    if (profile?.phone && !recipientPhone && !isViewingShared) {
-      setRecipientPhone(profile.phone);
+    if (profile && !isViewingShared) {
+      if (profile.fullName && (!nama || nama === "Pasien")) setNama(profile.fullName);
+      if (profile.phone && !recipientPhone) setRecipientPhone(profile.phone);
+      if (profile.age) setUsia(String(profile.age));
+      if (profile.gender) setKelamin(profile.gender === "Laki-laki" ? "L" : "P");
+      if (profile.height) setTinggi(String(profile.height));
+      if (profile.weight) setBerat(String(profile.weight));
     }
-  }, [profile, recipientPhone, isViewingShared]);
+  }, [profile, recipientPhone, isViewingShared, nama]);
 
   // Sync user name when user loads
   useEffect(() => {
-    if (user?.name && !nama && !isViewingShared) {
+    if (user?.name && (!nama || nama === "Pasien") && !isViewingShared) {
       setNama(user.name);
     }
   }, [user, nama, isViewingShared]);
@@ -432,6 +438,7 @@ function Skrining() {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL("image/png");
         setTonguePhoto(dataUrl);
+        setMediaType("image");
         stopCamera();
       }
     }
@@ -449,6 +456,8 @@ function Skrining() {
   const handleGalleryUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      const isVid = file.type.startsWith("video/");
+      setMediaType(isVid ? "video" : "image");
       const reader = new FileReader();
       reader.onloadend = () => {
         setTonguePhoto(reader.result as string);
@@ -879,6 +888,7 @@ function Skrining() {
       console.error("Error saving screening results:", err);
     } finally {
       setIsSavingScreening(false);
+      setAiReport(null);
       setStep("result");
       setSubmitted(true);
     }
@@ -1016,15 +1026,30 @@ function Skrining() {
             </Link>
           </nav>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {step === "result" && (
-              <button
-                onClick={triggerPrint}
-                className="flex items-center gap-1.5 rounded-full bg-primary/10 px-4 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all"
-              >
-                <Printer className="h-3.5 w-3.5" />
-                Cetak PDF
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStep("questions");
+                    setSubmitted(false);
+                    setJawaban({});
+                    setAiReport(null);
+                  }}
+                  className="flex items-center gap-1.5 rounded-full border border-neutral-300 px-3.5 py-1.5 text-xs font-semibold text-neutral-700 hover:border-primary hover:text-primary transition-all"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Isi Ulang
+                </button>
+                <button
+                  onClick={triggerPrint}
+                  className="flex items-center gap-1.5 rounded-full bg-primary/10 px-4 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  Cetak PDF
+                </button>
+              </>
             )}
             <Link
               to="/dashboard"
@@ -1035,241 +1060,34 @@ function Skrining() {
           </div>
         </div>
       </header>
-      {/* STEP 1: DEMOGRAPHIC PATIENT PROFILE FORM */}
-      {step === "profile" && (
-        <main className="no-print mx-auto max-w-2xl px-4 py-8 sm:py-14">
-          <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm sm:p-8">
-            <div className="flex items-center gap-2 text-primary">
-              <Sparkles className="h-5 w-5" />
-              <span className="text-xs font-bold uppercase tracking-wider">
-                Identifikasi Pasien
-              </span>
-            </div>
-            <h1 className="mt-2 font-display text-2xl font-bold tracking-tight text-neutral-900 sm:text-3xl">
-              Informasi Pengguna Baru
-            </h1>
-            <p className="mt-2 text-sm text-neutral-500 leading-relaxed">
-              Sebelum memulai skrining soal TCM, silakan lengkapi data fisik dan keluhan utama Anda
-              di bawah ini agar sistem dapat memformulasikan profiling yang akurat.
-            </p>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleNextStep();
-              }}
-              className="mt-8 space-y-6"
-            >
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="p_nama" className="block text-sm font-semibold text-neutral-700">
-                    Nama Lengkap
-                  </label>
-                  <div className="relative mt-1">
-                    <User className="absolute top-3 left-3 h-4 w-4 text-neutral-400" />
-                    <input
-                      id="p_nama"
-                      type="text"
-                      required
-                      placeholder="Masukkan nama Anda"
-                      value={nama}
-                      onChange={(e) => setNama(e.target.value)}
-                      className="w-full rounded-xl border border-neutral-300 py-2.5 pl-10 pr-4 text-sm focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label
-                      htmlFor="p_usia"
-                      className="block text-sm font-semibold text-neutral-700"
-                    >
-                      Usia (Tahun)
-                    </label>
-                    <input
-                      id="p_usia"
-                      type="number"
-                      required
-                      placeholder="Contoh: 15"
-                      value={usia}
-                      onChange={(e) => setUsia(e.target.value)}
-                      className="mt-1 w-full rounded-xl border border-neutral-300 p-2.5 text-sm focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="p_gender"
-                      className="block text-sm font-semibold text-neutral-700"
-                    >
-                      Kelamin
-                    </label>
-                    <select
-                      id="p_gender"
-                      value={kelamin}
-                      onChange={(e) => setKelamin(e.target.value as "L" | "P")}
-                      className="mt-1 w-full rounded-xl border border-neutral-300 p-2.5 text-sm focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary"
-                    >
-                      <option value="L">Laki-laki (L)</option>
-                      <option value="P">Perempuan (P)</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label
-                      htmlFor="p_tinggi"
-                      className="block text-sm font-semibold text-neutral-700"
-                    >
-                      Tinggi (cm)
-                    </label>
-                    <input
-                      id="p_tinggi"
-                      type="number"
-                      required
-                      placeholder="Contoh: 178"
-                      value={tinggi}
-                      onChange={(e) => setTinggi(e.target.value)}
-                      className="mt-1 w-full rounded-xl border border-neutral-300 p-2.5 text-sm focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="p_berat"
-                      className="block text-sm font-semibold text-neutral-700"
-                    >
-                      Berat (kg)
-                    </label>
-                    <input
-                      id="p_berat"
-                      type="number"
-                      required
-                      placeholder="Contoh: 48"
-                      value={berat}
-                      onChange={(e) => setBerat(e.target.value)}
-                      className="mt-1 w-full rounded-xl border border-neutral-300 p-2.5 text-sm focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="p_keluhan"
-                    className="block text-sm font-semibold text-neutral-700"
-                  >
-                    Keluhan Utama Pasien
-                  </label>
-                  <textarea
-                    id="p_keluhan"
-                    rows={3}
-                    required
-                    placeholder="Tuliskan keluhan yang Anda rasakan secara detail..."
-                    value={keluhan}
-                    onChange={(e) => setKeluhan(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-neutral-300 p-3 text-sm focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary"
-                  />
-                </div>
-
-                {/* Interactive Tongue Upload Section */}
-                <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-5">
-                  <span className="block text-sm font-semibold text-neutral-800">
-                    Foto Lidah Pasien
-                  </span>
-                  <span className="block text-xs text-neutral-500">
-                    Dokumentasi kondisi lidah pasien untuk diagnosa visual TCM
-                  </span>
-
-                  {tonguePhoto ? (
-                    <div className="mt-4 flex flex-col items-center gap-3">
-                      <img
-                        src={tonguePhoto}
-                        alt="Foto Lidah"
-                        className="h-32 w-32 rounded-lg border object-cover shadow-xs"
-                        referrerPolicy="no-referrer"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setTonguePhoto(null)}
-                        className="text-xs font-semibold text-red-600 hover:underline"
-                      >
-                        Hapus & Ganti Foto
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="mt-4">
-                      <p className="text-xs text-neutral-600 italic">
-                        Belum ada foto lidah. Upload sekarang?
-                      </p>
-                      <div className="mt-3 flex gap-3">
-                        <button
-                          type="button"
-                          onClick={startCamera}
-                          className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-neutral-300 bg-white py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
-                        >
-                          <Camera className="h-3.5 w-3.5 text-neutral-500" />
-                          Kamera (Webcam)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-neutral-300 bg-white py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
-                        >
-                          <ImageIcon className="h-3.5 w-3.5 text-neutral-500" />
-                          Unggah Galeri
-                        </button>
-                      </div>
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleGalleryUpload}
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-sm font-semibold text-white hover:opacity-95 transition-opacity"
-              >
-                Mulai Skrining Pertanyaan
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </form>
-          </div>
-        </main>
-      )}
-      {/* STEP 2: SCREENING QUESTIONS FORM */}
+      {/* STEP 1: SCREENING QUESTIONS FORM (PILIHAN GANDA) */}
       {step === "questions" && (
         <main className="no-print mx-auto max-w-3xl px-4 py-8 sm:py-12">
           <div className="mb-6 flex items-center justify-between">
-            <button
-              onClick={() => setStep("profile")}
-              className="flex items-center gap-1.5 text-sm font-medium text-neutral-600 hover:text-primary transition-colors"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Kembali ke Form Profil
-            </button>
-            <span className="text-xs text-neutral-500 font-semibold">
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+                Langkah 1 dari 2
+              </span>
+              <span className="text-xs font-semibold text-neutral-500">Kuesioner Gejala TCM</span>
+            </div>
+            <span className="text-xs font-semibold text-neutral-600 bg-white border px-3 py-1 rounded-full shadow-2xs">
               {Object.keys(jawaban).length} dari {questions.length} Soal Dijawab
             </span>
           </div>
 
           <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm sm:p-8">
             <h1 className="font-display text-2xl font-bold text-neutral-900">
-              Kuesioner Pendekatan Gejala TCM
+              1. Pengisian Soal Skrining Mandiri
             </h1>
-            <p className="mt-1 text-sm text-neutral-500">
+            <p className="mt-1 text-sm text-neutral-500 leading-relaxed">
               Jawablah pertanyaan-pertanyaan berikut berdasarkan kondisi tubuh yang Anda rasakan
               akhir-akhir ini.
             </p>
 
             {loading ? (
-              <div className="py-12 text-center text-sm text-neutral-500">
-                Memuat soal skrening...
+              <div className="py-12 text-center text-sm text-neutral-500 flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                Memuat soal skrining...
               </div>
             ) : (
               <div className="mt-8 space-y-6">
@@ -1310,21 +1128,180 @@ function Skrining() {
                   </div>
                 ))}
 
-                <div className="mt-10 flex items-center justify-between border-t pt-6">
+                <div className="mt-10 flex flex-col sm:flex-row items-center justify-between border-t pt-6 gap-4">
                   <span className="text-xs text-neutral-500 italic">
-                    *Semua pertanyaan wajib dijawab untuk hasil analisa terbaik
+                    *Harap jawab semua pertanyaan untuk melanjutkan ke tahap upload foto/video lidah
                   </span>
                   <button
                     type="button"
                     disabled={Object.keys(jawaban).length < questions.length}
-                    onClick={handleSubmitAll}
-                    className="rounded-full bg-primary px-8 py-3 text-sm font-semibold text-white transition-all hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-40"
+                    onClick={() => setStep("detail")}
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-full bg-primary px-8 py-3.5 text-sm font-semibold text-white transition-all hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    Lihat Hasil Profiling TCM
+                    Lanjut: Upload Foto/Video Lidah & Keterangan Rinci
+                    <ChevronRight className="h-4 w-4" />
                   </button>
                 </div>
               </div>
             )}
+          </div>
+        </main>
+      )}
+      {/* STEP 2: UPLOAD PHOTO/VIDEO LIDAH & KETERANGAN LEBIH RINCI */}
+      {step === "detail" && (
+        <main className="no-print mx-auto max-w-2xl px-4 py-8 sm:py-12">
+          <div className="mb-6 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setStep("questions")}
+              className="flex items-center gap-1.5 text-sm font-medium text-neutral-600 hover:text-primary transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Kembali ke Soal Skrining
+            </button>
+
+            <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+              Langkah 2 dari 2
+            </span>
+          </div>
+
+          <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm sm:p-8">
+            <div className="flex items-center gap-2 text-primary">
+              <Camera className="h-5 w-5" />
+              <span className="text-xs font-bold uppercase tracking-wider">
+                Dokumentasi &amp; Anamnesis
+              </span>
+            </div>
+            <h1 className="mt-2 font-display text-2xl font-bold tracking-tight text-neutral-900 sm:text-3xl">
+              2. Upload Foto/Video Lidah &amp; Keterangan Rinci
+            </h1>
+            <p className="mt-2 text-sm text-neutral-500 leading-relaxed">
+              Silakan upload foto atau rekaman video lidah Anda dan lengkapi rincian keluhan tubuh
+              agar diagnosa TCM &amp; AI Herbal semakin akurat.
+            </p>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleSubmitAll();
+              }}
+              className="mt-8 space-y-6"
+            >
+              <div className="space-y-6">
+                <div>
+                  <label
+                    htmlFor="p_keluhan"
+                    className="block text-sm font-semibold text-neutral-800"
+                  >
+                    Keluhan Utama &amp; Keterangan Lebih Rinci
+                  </label>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Tuliskan keluhan atau gejala fisik yang Anda rasakan secara detail (misal:
+                    sensasi panas/dingin, rasa tidak nyaman di perut, kualitas tidur, tingkat lelah,
+                    durasi keluhan, dsb).
+                  </p>
+                  <textarea
+                    id="p_keluhan"
+                    rows={6}
+                    required
+                    placeholder="Tuliskan paragraf rincian keluhan Anda di sini..."
+                    value={keluhan}
+                    onChange={(e) => setKeluhan(e.target.value)}
+                    className="mt-2 w-full rounded-xl border border-neutral-300 p-3.5 text-sm leading-relaxed focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary shadow-2xs"
+                  />
+                </div>
+
+                {/* Interactive Tongue Upload Section (Photo & Video) */}
+                <div className="rounded-2xl border border-dashed border-neutral-300 bg-neutral-50/80 p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="block text-sm font-semibold text-neutral-800">
+                        Upload Foto / Video Lidah
+                      </span>
+                      <span className="block text-xs text-neutral-500 mt-0.5">
+                        Ambil foto via kamera atau upload foto/video singkat lidah dari galeri.
+                      </span>
+                    </div>
+                    <Video className="h-5 w-5 text-neutral-400" />
+                  </div>
+
+                  {tonguePhoto ? (
+                    <div className="mt-4 flex flex-col items-center gap-3">
+                      {tonguePhoto.startsWith("data:video/") || mediaType === "video" ? (
+                        <video
+                          src={tonguePhoto}
+                          controls
+                          className="h-44 w-full max-w-sm rounded-xl border border-neutral-300 bg-black object-contain shadow-xs"
+                        />
+                      ) : (
+                        <img
+                          src={tonguePhoto}
+                          alt="Foto Lidah"
+                          className="h-44 w-44 rounded-xl border border-neutral-300 object-cover shadow-xs"
+                          referrerPolicy="no-referrer"
+                        />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setTonguePhoto(null)}
+                        className="text-xs font-semibold text-red-600 hover:underline flex items-center gap-1"
+                      >
+                        Hapus &amp; Ambil Ulang Media
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-4">
+                      <p className="text-xs text-neutral-600 italic">
+                        Belum ada media terlampir. Pilih salah satu opsi di bawah ini:
+                      </p>
+                      <div className="mt-3 flex flex-col sm:flex-row gap-3">
+                        <button
+                          type="button"
+                          onClick={startCamera}
+                          className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-neutral-300 bg-white py-2.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-100 transition-colors shadow-2xs"
+                        >
+                          <Camera className="h-4 w-4 text-primary" />
+                          Ambil Foto (Kamera)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-neutral-300 bg-white py-2.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-100 transition-colors shadow-2xs"
+                        >
+                          <ImageIcon className="h-4 w-4 text-primary" />
+                          Upload Foto / Video Galeri
+                        </button>
+                      </div>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        accept="image/*,video/*"
+                        className="hidden"
+                        onChange={handleGalleryUpload}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSavingScreening}
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3.5 text-sm font-semibold text-white hover:opacity-95 transition-opacity disabled:opacity-50 shadow-sm"
+              >
+                {isSavingScreening ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Memproses &amp; Menyimpan Hasil...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    Lihat Hasil Skrining
+                  </>
+                )}
+              </button>
+            </form>
           </div>
         </main>
       )}{" "}

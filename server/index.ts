@@ -883,6 +883,54 @@ app.get("/api/screening/questions", async (_req, res) => {
   }
 });
 
+app.get("/api/admin/screenings", async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    const db = getDb();
+    const results = await db
+      .select({
+        id: screeningResults.id,
+        userId: screeningResults.userId,
+        answers: screeningResults.answers,
+        score: screeningResults.score,
+        maxScore: screeningResults.maxScore,
+        level: screeningResults.level,
+        advice: screeningResults.advice,
+        createdAt: screeningResults.createdAt,
+        userEmail: users.email,
+        fullName: profiles.fullName,
+        phone: profiles.phone,
+        gender: profiles.gender,
+        age: profiles.age,
+        tonguePhotoUrl: profiles.tonguePhotoUrl,
+        complaints: profiles.address,
+      })
+      .from(screeningResults)
+      .leftJoin(users, eq(screeningResults.userId, users.id))
+      .leftJoin(profiles, eq(screeningResults.userId, profiles.userId))
+      .orderBy(desc(screeningResults.createdAt));
+
+    res.json(results);
+  } catch (error) {
+    res.status(503).json({
+      message: error instanceof Error ? error.message : "Gagal memuat daftar hasil skrining.",
+    });
+  }
+});
+
+app.delete("/api/admin/screenings/:id", async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    const db = getDb();
+    await db.delete(screeningResults).where(eq(screeningResults.id, req.params.id));
+    res.json({ message: "Hasil skrining berhasil dihapus." });
+  } catch (error) {
+    res.status(500).json({
+      message: error instanceof Error ? error.message : "Gagal menghapus hasil skrining.",
+    });
+  }
+});
+
 app.post("/api/admin/screening/questions", async (req, res) => {
   try {
     if (!(await requireAdmin(req, res))) return;

@@ -2677,7 +2677,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [adminModeTab, setAdminModeTab] = useState<"manage" | "test">("manage");
+  const [adminModeTab, setAdminModeTab] = useState<"results" | "manage" | "test">("results");
 
   // State for adding new question
   const [newQuestionText, setNewQuestionText] = useState("");

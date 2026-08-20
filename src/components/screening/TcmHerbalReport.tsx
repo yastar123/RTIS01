@@ -14,7 +14,12 @@ import {
   Droplets,
   Clock,
   Compass,
+  MapPin,
+  Target,
+  Zap,
+  Crosshair,
 } from "lucide-react";
+import { calculateTcmResult, getDominantConstitution, createTcmReportHelpers } from "@/lib/tcm";
 
 export interface HerbalIndonesiaItem {
   namaIndonesia: string;
@@ -35,6 +40,14 @@ export interface HerbalChinaItem {
   fungsiUtama: string;
   indikasi: string;
   rekomendasiFormula: string;
+}
+
+export interface TitikAkupunkturItem {
+  namaTitik: string;
+  meridian: string;
+  lokasiAnatomi: string;
+  indikasiTerapi: string;
+  metodeStimulasi: string;
 }
 
 export interface TcmAiReport {
@@ -67,6 +80,7 @@ export interface TcmAiReport {
     deskripsi: string;
   }>;
   peringatanPrioritasTinggi: string[];
+  titikAkupunktur?: TitikAkupunkturItem[];
   rekomendasiDietGayaHidup: {
     dietDianjurkan: string;
     dietDihindari: string;
@@ -86,9 +100,9 @@ export interface TcmAiReport {
 
 interface TcmHerbalReportProps {
   report: TcmAiReport | null;
-  isLoadingAi: boolean;
+  isLoadingAi?: boolean;
   onRefreshAi?: () => void;
-  results: {
+  results?: {
     balanceScore: number;
     imbalEnergy: number;
     imbalBlood: number;
@@ -103,7 +117,7 @@ interface TcmHerbalReportProps {
     organImbalances: Record<string, number>;
     weiQi: number;
   };
-  dominant: {
+  dominant?: {
     name: string;
     pct: number;
     desc: string;
@@ -114,29 +128,51 @@ interface TcmHerbalReportProps {
     acupressureLoc: string;
     acupressureFunc: string;
   };
-  getActiveSyndromesString: () => string;
-  getKeluhanUtamaManifestasi: () => string;
-  getTop3OrgansString: () => string;
-  getPrimaryTherapeuticPriority: () => string;
-  getTop3OrgansList: () => Array<{ name: string; val: string; desc: string }>;
-  getMostInfluentialSymptoms: () => string[];
-  listCriticalImbalances: () => string[];
+  answers?: Record<string, number>;
+  isAdmin?: boolean;
+  getActiveSyndromesString?: () => string;
+  getKeluhanUtamaManifestasi?: () => string;
+  getTop3OrgansString?: () => string;
+  getPrimaryTherapeuticPriority?: () => string;
+  getTop3OrgansList?: () => Array<{ name: string; val: string; desc: string }>;
+  getMostInfluentialSymptoms?: () => string[];
+  listCriticalImbalances?: () => string[];
 }
 
 export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
   report,
-  isLoadingAi,
+  isLoadingAi = false,
   onRefreshAi,
-  results,
-  dominant,
-  getActiveSyndromesString,
-  getKeluhanUtamaManifestasi,
-  getTop3OrgansString,
-  getPrimaryTherapeuticPriority,
-  getTop3OrgansList,
-  getMostInfluentialSymptoms,
-  listCriticalImbalances,
+  results: propResults,
+  dominant: propDominant,
+  answers = {},
+  isAdmin = false,
+  getActiveSyndromesString: propGetActiveSyndromesString,
+  getKeluhanUtamaManifestasi: propGetKeluhanUtamaManifestasi,
+  getTop3OrgansString: propGetTop3OrgansString,
+  getPrimaryTherapeuticPriority: propGetPrimaryTherapeuticPriority,
+  getTop3OrgansList: propGetTop3OrgansList,
+  getMostInfluentialSymptoms: propGetMostInfluentialSymptoms,
+  listCriticalImbalances: propListCriticalImbalances,
 }) => {
+  const computedResults = propResults || calculateTcmResult(answers, 24);
+  const computedDominant = propDominant || getDominantConstitution(computedResults);
+  const helpers = createTcmReportHelpers(answers, computedResults);
+
+  const results = computedResults;
+  const dominant = computedDominant;
+
+  const getActiveSyndromesString = propGetActiveSyndromesString || helpers.getActiveSyndromesString;
+  const getKeluhanUtamaManifestasi =
+    propGetKeluhanUtamaManifestasi || helpers.getKeluhanUtamaManifestasi;
+  const getTop3OrgansString = propGetTop3OrgansString || helpers.getTop3OrgansString;
+  const getPrimaryTherapeuticPriority =
+    propGetPrimaryTherapeuticPriority || helpers.getPrimaryTherapeuticPriority;
+  const getTop3OrgansList = propGetTop3OrgansList || helpers.getTop3OrgansList;
+  const getMostInfluentialSymptoms =
+    propGetMostInfluentialSymptoms || helpers.getMostInfluentialSymptoms;
+  const listCriticalImbalances = propListCriticalImbalances || helpers.listCriticalImbalances;
+
   const criticalList = report?.peringatanPrioritasTinggi?.length
     ? report.peringatanPrioritasTinggi
     : listCriticalImbalances();
@@ -361,7 +397,7 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
             </div>
             <div>
               <h3 className="font-display text-base sm:text-lg font-bold text-emerald-950">
-                Rekomendasi Herbal Tradisional Indonesia
+                Rekomendasi formulasi Herbal Tradisional Indonesia
               </h3>
               <p className="text-xs text-emerald-700">
                 Simplisia &amp; Jamu Nusantara yang cocok dengan profil sindrom TCM Anda.
@@ -583,6 +619,172 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
           langsung dengan Sinshe / Terapis di Rumah Terapy Ikhtiar Sehat.
         </p>
       </div>
+
+      {/* 5.5. REKOMENDASI TITIK AKUPUNKTUR & MERIDIAN TERAPI (KHUSUS ADMIN/PRAKTISI KLINIK) */}
+      {isAdmin ? (
+        <div className="rounded-xl border border-teal-200 bg-teal-50/30 p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-700 text-white shadow-xs">
+                <Crosshair className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-display text-base sm:text-lg font-bold text-teal-950">
+                  Rekomendasi Titik Akupunktur &amp; Meridian Terapi
+                </h3>
+                <p className="text-xs text-teal-800">
+                  Diproses secara otomatis oleh AI berdasarkan analisis kuesioner (Langkah 1) serta
+                  keluhan &amp; foto lidah (Langkah 2).
+                </p>
+              </div>
+            </div>
+            <span className="self-start sm:self-center shrink-0 rounded-full bg-teal-100 px-3 py-1 text-[11px] font-bold text-teal-900 border border-teal-300 flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5 text-teal-700" />
+              Acupuncture AI Prescription (Khusus Admin)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {(report?.titikAkupunktur && report.titikAkupunktur.length > 0
+              ? report.titikAkupunktur
+              : [
+                  {
+                    namaTitik: "Zusanli (ST-36 / 足三里)",
+                    meridian: "Meridian Lambung Foot-Yangming",
+                    lokasiAnatomi:
+                      "4 jari di bawah tempurung lutut (patella), 1 jari di sisi luar tulang tibia.",
+                    indikasiTerapi:
+                      "Menguatkan Qi Limpa & Lambung, mereharmonisasi pencernaan, menyerap kelembapan internal.",
+                    metodeStimulasi:
+                      "Penusukan jarum steril tegak lurus 1-1.5 cun / pemijatan hangat melingkar 2-3 menit.",
+                  },
+                  {
+                    namaTitik: "Sanyinjiao (SP-6 / 三阴交)",
+                    meridian: "Meridian Limpa Foot-Taiyin (Pertemuan 3 Meridian Yin)",
+                    lokasiAnatomi:
+                      "3 jari di atas puncak mata kaki dalam, tepat di belakang tepi tulang tibia.",
+                    indikasiTerapi:
+                      "Menyelaraskan metabolisme Limpa, Hati, Ginjal, serta menguraikan kelembapan tubuh.",
+                    metodeStimulasi:
+                      "Penusukan tegak lurus 1-1.5 cun / penekanan lembut melingkar. (Perhatian: Kontraindikasi ibu hamil).",
+                  },
+                  {
+                    namaTitik: "Zhongwan (RN-12 / 中脘)",
+                    meridian: "Meridian Ren (Conception Vessel) - Titik Mu Depan Lambung",
+                    lokasiAnatomi:
+                      "Garis tengah perut, pertengahan antara ujung tulang dada dan pusat (pusar).",
+                    indikasiTerapi:
+                      "Harmonisasi Lambung, meredakan rasa kembung, begah, mual, serta menguraikan kelembapan.",
+                    metodeStimulasi:
+                      "Penusukan tegak lurus 0.8-1.2 cun / moksibusi hangat / penekanan hangat telapak tangan.",
+                  },
+                  {
+                    namaTitik: "Taichong (LR-3 / 太冲)",
+                    meridian: "Meridian Hati Foot-Jueyin - Titik Shu-Stream & Yuan-Source",
+                    lokasiAnatomi:
+                      "Punggung kaki, cekungan antara tulang metatarsal I dan II (pangkal sela jempol & telunjuk kaki).",
+                    indikasiTerapi:
+                      "Mengurai stagnasi Qi Hati akibat stres, meredakan ketegangan otot leher-bahu.",
+                    metodeStimulasi:
+                      "Penusukan miring ke sela jari 0.5-1.0 cun dengan teknik sedasi / pemijatan perlahan.",
+                  },
+                  {
+                    namaTitik: "Shenshu (BL-23 / 肾俞)",
+                    meridian: "Meridian Kandung Kemih - Titik Back-Shu Ginjal",
+                    lokasiAnatomi:
+                      "Punggung bawah (lumbal II), 1.5 cun (2 jari) di luar garis tengah tulang belakang.",
+                    indikasiTerapi:
+                      "Menghangatkan Yang Ginjal, menguatkan pinggang & lutut, memulihkan stamina esensial.",
+                    metodeStimulasi:
+                      "Penusukan tegak lurus 1.0-1.2 cun / moksibusi hangat (Moxa) penghangat Yang.",
+                  },
+                  {
+                    namaTitik: "Neiguan (PC-6 / 内关)",
+                    meridian: "Meridian Perikardium Hand-Jueyin",
+                    lokasiAnatomi:
+                      "2 jari di atas lipatan pergelangan tangan dalam, di antara dua tendon otot.",
+                    indikasiTerapi:
+                      "Menenangkan dada dan pikiran (Shen), meredakan mual, asam lambung, dan rasa cemas.",
+                    metodeStimulasi:
+                      "Penusukan tegak lurus 0.5-1.0 cun / pemijatan titik dengan ibu jari selama 2 menit.",
+                  },
+                ]
+            ).map((point, idx) => (
+              <div
+                key={idx}
+                className="rounded-xl border border-teal-200/80 bg-white p-4 shadow-2xs space-y-3 flex flex-col justify-between hover:border-teal-400 transition-colors"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-200 inline-block mb-1">
+                        Titik Akupunktur #{idx + 1}
+                      </span>
+                      <h4 className="font-display text-base font-bold text-neutral-900 leading-tight">
+                        {point.namaTitik}
+                      </h4>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] font-semibold text-teal-800 bg-teal-50/60 px-2 py-1 rounded border border-teal-100 flex items-center gap-1.5">
+                    <Zap className="h-3.5 w-3.5 shrink-0 text-teal-600" />
+                    <span>{point.meridian}</span>
+                  </div>
+
+                  <div className="space-y-1.5 text-xs text-neutral-700 pt-1">
+                    <div className="flex items-start gap-1.5">
+                      <MapPin className="h-3.5 w-3.5 shrink-0 text-amber-600 mt-0.5" />
+                      <div>
+                        <strong className="text-neutral-900">Lokasi Anatomi:</strong>{" "}
+                        <span>{point.lokasiAnatomi}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-1.5">
+                      <Target className="h-3.5 w-3.5 shrink-0 text-emerald-600 mt-0.5" />
+                      <div>
+                        <strong className="text-neutral-900">Indikasi Terapi:</strong>{" "}
+                        <span>{point.indikasiTerapi}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-teal-100 pt-2 text-[11px] text-teal-950 bg-teal-50/40 p-2 rounded-lg space-y-0.5">
+                  <div className="flex items-center gap-1 text-teal-800 font-bold">
+                    <Sparkles className="h-3 w-3 text-teal-600" />
+                    <span>Metode Stimulasi / Penusukan:</span>
+                  </div>
+                  <p className="text-neutral-700">{point.metodeStimulasi}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-[11px] text-teal-800/80 italic">
+            * Catatan Praktisi: Pemilihan titik akupunktur di atas disesuaikan dengan sindrom utama
+            pasien. Penusukan jarum steril hendaknya dilakukan oleh Akupunturis / Terapis
+            bersertifikat di Rumah Terapy Ikhtiar Sehat.
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-teal-200/80 bg-teal-50/40 p-5 space-y-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2.5 text-teal-950 font-bold text-sm sm:text-base">
+              <Crosshair className="h-4 w-4 text-teal-700 shrink-0" />
+              <span>Rekomendasi Titik Akupunktur &amp; Meridian Terapi</span>
+            </div>
+            <span className="rounded-full bg-teal-100 px-2.5 py-0.5 text-[10px] font-bold text-teal-800 border border-teal-200">
+              Khusus Terapis Klinik
+            </span>
+          </div>
+          <p className="text-xs text-neutral-700 leading-relaxed">
+            <strong>Catatan:</strong> Penentuan titik akupunktur dan teknik penusukan jarum secara
+            spesifik disesuaikan oleh Akupunturis / Sinshe tersertifikasi saat sesi konsultasi dan
+            terapi langsung di klinik <strong>Rumah Terapy Ikhtiar Sehat</strong>.
+          </p>
+        </div>
+      )}
 
       {/* 6. PROFIL KETIDAKSEIMBANGAN DASAR (METERS) */}
       <div className="border-t border-neutral-200 pt-6 space-y-4">

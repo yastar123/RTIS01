@@ -20,6 +20,14 @@ export interface PatientScreeningInput {
   };
 }
 
+export interface TitikAkupunkturItem {
+  namaTitik: string;
+  meridian: string;
+  lokasiAnatomi: string;
+  indikasiTerapi: string;
+  metodeStimulasi: string;
+}
+
 export interface TcmAiAnalysisResponse {
   kesimpulanHolistik: {
     statusVitalitas: string;
@@ -50,6 +58,7 @@ export interface TcmAiAnalysisResponse {
     deskripsi: string;
   }>;
   peringatanPrioritasTinggi: string[];
+  titikAkupunktur?: TitikAkupunkturItem[];
   rekomendasiDietGayaHidup: {
     dietDianjurkan: string;
     dietDihindari: string;
@@ -285,6 +294,68 @@ export function generateFallbackTcmAnalysis(input: PatientScreeningInput): TcmAi
       },
     ],
     peringatanPrioritasTinggi: criticalWarnings,
+    titikAkupunktur: [
+      {
+        namaTitik: "Zusanli (ST-36 / 足三里)",
+        meridian: "Meridian Lambung Foot-Yangming",
+        lokasiAnatomi:
+          "4 jari di bawah tempurung lutut (patella), 1 jari di sisi luar tulang tibia.",
+        indikasiTerapi:
+          "Menguatkan Qi Limpa & Lambung, mereharmonisasi pencernaan, meningkatkan daya tahan tubuh (Wei Qi).",
+        metodeStimulasi:
+          "Penusukan jarum steril tegak lurus 1-1.5 cun dengan teknik tonifikasi (Bu Fa) / pemijatan hangat 2-3 menit.",
+      },
+      {
+        namaTitik: "Sanyinjiao (SP-6 / 三阴交)",
+        meridian: "Meridian Limpa Foot-Taiyin (Pertemuan 3 Meridian Yin kaki: Limpa, Hati, Ginjal)",
+        lokasiAnatomi:
+          "3 jari di atas puncak malleolus medialis (mata kaki dalam), tepat di belakang tepi tulang tibia.",
+        indikasiTerapi:
+          "Menyelaraskan metabolisme Limpa, Hati, Ginjal, mengurai kelembapan internal, dan menutrisi Darah.",
+        metodeStimulasi:
+          "Penusukan tegak lurus 1-1.5 cun / pemijatan lembut melingkar. (Kontraindikasi: Wanita hamil).",
+      },
+      {
+        namaTitik: "Zhongwan (RN-12 / 中脘)",
+        meridian: "Meridian Ren (Conception Vessel) - Titik Mu Depan Lambung",
+        lokasiAnatomi:
+          "Di garis tengah perut, pertengahan antara ujung prosesus xiphoideus (tulang dada) dan pusat (pusar).",
+        indikasiTerapi:
+          "Harmonisasi Lambung, meredakan kembung, mual, rasa begah, serta mengurai kelembapan perut.",
+        metodeStimulasi:
+          "Penusukan tegak lurus 0.8-1.2 cun / moksibusi hangat (Moxa) / penekanan telapak tangan hangat.",
+      },
+      {
+        namaTitik: "Taichong (LR-3 / 太冲)",
+        meridian: "Meridian Hati Foot-Jueyin - Titik Shu-Stream & Yuan-Source",
+        lokasiAnatomi:
+          "Di punggung kaki, pada cekungan antara tulang metatarsal I dan II (pangkal sela jempol dan telunjuk kaki).",
+        indikasiTerapi:
+          "Mengurai stagnasi Qi Hati akibat stres/emosi, meredakan ketegangan leher-bahu, dan menenangkan Shen.",
+        metodeStimulasi:
+          "Penusukan miring ke arah sela jari 0.5-1.0 cun dengan teknik sedasi (Xie Fa) / penekanan perlahan.",
+      },
+      {
+        namaTitik: "Shenshu (BL-23 / 肾俞)",
+        meridian: "Meridian Kandung Kemih Foot-Taiyang - Titik Back-Shu Ginjal",
+        lokasiAnatomi:
+          "Di punggung bawah (lumbal II), 1.5 cun (2 jari) di sisi luar garis tengah tulang belakang.",
+        indikasiTerapi:
+          "Menghangatkan Yang Ginjal, menguatkan pinggang & lutut, memulihkan energi esensial tubuh.",
+        metodeStimulasi:
+          "Penusukan tegak lurus 1.0-1.2 cun / moksibusi hangat (Moxa) untuk menghangatkan Yang.",
+      },
+      {
+        namaTitik: "Neiguan (PC-6 / 内关)",
+        meridian: "Meridian Perikardium Hand-Jueyin",
+        lokasiAnatomi:
+          "2 jari di atas lipatan pergelangan tangan bagian dalam, di antara dua tendon otot tangan.",
+        indikasiTerapi:
+          "Menenangkan dada dan pikiran, meredakan mual/asam lambung, mengatasi kecemasan dan palpitasi.",
+        metodeStimulasi:
+          "Penusukan tegak lurus 0.5-1.0 cun / pemijatan titik dengan ibu jari selama 2 menit.",
+      },
+    ],
     rekomendasiDietGayaHidup: {
       dietDianjurkan:
         "Santap makanan bersuhu hangat, sup kaldu rempah, bubur beras merah, rebusan jahe, labu kuning, ubi jalar, kayu manis, dan sayuran matang yang dimasak dengan bumbu penghangat.",
@@ -494,6 +565,7 @@ export async function generateOpenRouterTcmAnalysis(
     const patientGender = input.patientProfile?.gender || "Laki-laki";
     const patientComplaints =
       input.patientProfile?.complaints || "Tidak ada keluhan spesifik tertulis.";
+    const hasTonguePhoto = Boolean(input.patientProfile?.tonguePhoto);
 
     const questionsList = (input.questions || [])
       .map((q, idx) => {
@@ -508,21 +580,23 @@ Anda adalah seorang Dokter / Sinshe Senior Konsultan Traditional Chinese Medicin
 Tugas Anda adalah melakukan analisa mendalam terhadap hasil skrining mandiri kesehatan TCM pasien, lalu menghasilkan rekomendasi pengobatan komprehensif yang mencakup:
 1. Herbal Tradisional Indonesia (Jamu / Fitofarmaka / Simplisia)
 2. Herbal Tradisional China (TCM Single Herbs & Formula Klasik Zang-Fu)
-3. Kesimpulan Analisa Holistik (Status Vitalitas, Root Cause, Qi & Blood, Psiko-Emosional, Wei Qi, Patogen, Prioritas Terapi)
-4. Profil Ketidakseimbangan Dasar (Qi, Blood, Yin, Yang, Qi Stagnation, Blood Stasis, Dampness, Phlegm, Heat, Cold dalam persentase 0-100)
-5. Profil Ketidakseimbangan Organ (Limpa, Ginjal, Hati, Jantung, Paru, Lambung, Kandung Empedu, Usus Besar, Usus Kecil, Kandung Kemih, San Jiao)
-6. Rekomendasi Pola Hidup & Diet (Makanan dianjurkan, dihindari, gaya hidup, 3-4 titik akupresur spesifik beserta lokasi & cara tekan)
-7. Pola Ketidakseimbangan TCM (Sindrom kombinasi TCM beserta confidence match %)
-8. Peringatan Prioritas Tinggi! (Jika ada ketidakseimbangan kritis atau red flag klinis)
+3. Rekomendasi Titik Akupunktur & Meridian Terapi Utama (4-6 titik meridian akurat beserta lokasi anatomis, indikasi terapi, dan metode stimulasi penusukan/pijat)
+4. Kesimpulan Analisa Holistik (Status Vitalitas, Root Cause, Qi & Blood, Psiko-Emosional, Wei Qi, Patogen, Prioritas Terapi)
+5. Profil Ketidakseimbangan Dasar (Qi, Blood, Yin, Yang, Qi Stagnation, Blood Stasis, Dampness, Phlegm, Heat, Cold dalam persentase 0-100)
+6. Profil Ketidakseimbangan Organ (Limpa, Ginjal, Hati, Jantung, Paru, Lambung, Kandung Empedu, Usus Besar, Usus Kecil, Kandung Kemih, San Jiao)
+7. Rekomendasi Pola Hidup & Diet (Makanan dianjurkan, dihindari, gaya hidup, 3-4 titik akupresur mandiri)
+8. Pola Ketidakseimbangan TCM (Sindrom kombinasi TCM beserta confidence match %)
+9. Peringatan Prioritas Tinggi! (Jika ada ketidakseimbangan kritis atau red flag klinis)
 
-DATA PASIEN:
+DATA PASIEN & ANAMNESIS LANGKAH 2:
 - Nama: ${patientName}
 - Usia: ${patientAge} tahun
 - Jenis Kelamin: ${patientGender}
 - Tinggi Badan: ${input.patientProfile?.height || "-"} cm, Berat: ${input.patientProfile?.weight || "-"} kg
-- Keluhan Pasien: "${patientComplaints}"
+- Keluhan Utama & Keterangan Rinci Pasien (Langkah 2): "${patientComplaints}"
+- Lampiran Foto/Video Lidah (Langkah 2): ${hasTonguePhoto ? "Pasien mengunggah foto/video sampel lidah untuk pengamatan Lidah (She Zhen)" : "Tidak ada foto lidah"}
 
-DAFTAR JAWABAN KUESIONER SKRENING PASIEN:
+DAFTAR JAWABAN KUESIONER SKRINING PASIEN (LANGKAH 1):
 ${questionsList || JSON.stringify(input.answers)}
 
 BERIKAN OUTPUT DALAM FORMAT JSON PERSIS DENGAN STRUKTUR BERIKUT:
@@ -567,6 +641,15 @@ BERIKAN OUTPUT DALAM FORMAT JSON PERSIS DENGAN STRUKTUR BERIKUT:
   ],
   "peringatanPrioritasTinggi": [
     "string peringatan klinis atau red flags (jika ada)"
+  ],
+  "titikAkupunktur": [
+    {
+      "namaTitik": "Zusanli (ST-36)",
+      "meridian": "Meridian Lambung Foot-Yangming",
+      "lokasiAnatomi": "4 jari di bawah tempurung lutut, 1 jari di luar tepi anterior tulang kering",
+      "indikasiTerapi": "Menguatkan Limpa & Lambung, mereharmonisasi pencernaan, menyerap kelembapan",
+      "metodeStimulasi": "Penusukan tegak lurus 1-1.5 cun / pemijatan hangat 2-3 menit"
+    }
   ],
   "rekomendasiDietGayaHidup": {
     "dietDianjurkan": "string (daftar makanan hangat, sup, rempah bergizi)",
