@@ -474,9 +474,9 @@ export function generateFallbackTcmAnalysis(input: PatientScreeningInput): TcmAi
 }
 
 /**
- * Calls Gemini 3.7 Flash model to generate holistic TCM & Herbal analysis
+ * Calls OpenRouter AI model to generate holistic TCM & Herbal analysis
  */
-export async function generateGeminiTcmAnalysis(
+export async function generateOpenRouterTcmAnalysis(
   input: PatientScreeningInput,
 ): Promise<TcmAiAnalysisResponse> {
   const openRouterApiKey = (process.env.OPENROUTER_API_KEY || "").trim();
@@ -670,6 +670,11 @@ PASTIKAN SEMUA TEXT DALAM BAHASA INDONESIA YANG BAIK, JELAS, PROFESIONAL, EMPATI
         if (cleaned.startsWith("```")) {
           cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
         }
+        const firstBrace = cleaned.indexOf("{");
+        const lastBrace = cleaned.lastIndexOf("}");
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+        }
         cleaned = cleaned.trim();
 
         try {
@@ -692,3 +697,5 @@ PASTIKAN SEMUA TEXT DALAM BAHASA INDONESIA YANG BAIK, JELAS, PROFESIONAL, EMPATI
     return generateFallbackTcmAnalysis(input);
   }
 }
+
+export const generateGeminiTcmAnalysis = generateOpenRouterTcmAnalysis;

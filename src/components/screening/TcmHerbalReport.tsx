@@ -152,17 +152,17 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h4 className="font-display text-sm sm:text-base font-bold text-neutral-900">
-                Analisis Holistik AI Gemini &amp; Panduan Herbal TCM
+                Analisis Holistik OpenRouter AI &amp; Panduan Herbal TCM
               </h4>
               {report?.isAiGenerated && (
                 <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                  AI Active
+                  OpenRouter AI Active
                 </span>
               )}
             </div>
             <p className="text-xs text-neutral-600">
               {isLoadingAi
-                ? "Menghubungkan ke Gemini AI untuk menganalisa sindrom & meracik formula herbal..."
+                ? "Menghubungkan ke OpenRouter AI untuk menganalisa sindrom & meracik formula herbal..."
                 : "Hasil skrining dipadukan dengan formula herbal Indonesia & Tradisional China yang dipersonalisasi."}
             </p>
           </div>

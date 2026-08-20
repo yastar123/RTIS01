@@ -18,7 +18,7 @@ import {
   sessions,
   users,
 } from "./db/schema";
-import { generateGeminiTcmAnalysis } from "./geminiTcm";
+import { generateOpenRouterTcmAnalysis } from "./geminiTcm";
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
@@ -436,7 +436,7 @@ app.post("/api/screening/generate-ai-analysis", async (req, res) => {
       return res.status(400).json({ message: "Data jawaban kuesioner diperlukan." });
     }
 
-    const aiReport = await generateGeminiTcmAnalysis({
+    const aiReport = await generateOpenRouterTcmAnalysis({
       answers,
       questions,
       patientProfile,
