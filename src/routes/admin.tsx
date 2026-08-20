@@ -138,7 +138,7 @@ function AdminPage() {
   const [reservationDialog, setReservationDialog] = useState<Reservation | "new" | null>(null);
   const [articleDialog, setArticleDialog] = useState<Article | "new" | null>(null);
   const [userDialog, setUserDialog] = useState<RegisteredUser | "new" | null>(null);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   const loadData = async () => {

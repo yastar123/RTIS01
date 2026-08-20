@@ -96,7 +96,7 @@ export function DashboardPage() {
     return isAdmin ? "overview" : "screening";
   });
 
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   useEffect(() => {

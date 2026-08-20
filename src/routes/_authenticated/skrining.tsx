@@ -1736,17 +1736,18 @@ function Skrining() {
 
             {/* AI-POWERED TCM & HERBAL REPORT (INDONESIA & CHINA) */}
             <TcmHerbalReport
-              aiReport={aiReport}
+              report={aiReport}
               isLoadingAi={isLoadingAi}
-              onRegenerateAi={() => requestAiAnalysis()}
+              onRefreshAi={() => requestAiAnalysis()}
               results={results}
               dominant={dominant}
-              criticalImbalances={listCriticalImbalances()}
-              activeSyndromesString={getActiveSyndromesString()}
-              manifestasiKeluhan={getKeluhanUtamaManifestasi()}
-              top3OrgansString={getTop3OrgansString()}
-              primaryTherapeuticPriority={getPrimaryTherapeuticPriority()}
-              top3OrgansList={getTop3OrgansList()}
+              getActiveSyndromesString={getActiveSyndromesString}
+              getKeluhanUtamaManifestasi={getKeluhanUtamaManifestasi}
+              getTop3OrgansString={getTop3OrgansString}
+              getPrimaryTherapeuticPriority={getPrimaryTherapeuticPriority}
+              getTop3OrgansList={getTop3OrgansList}
+              getMostInfluentialSymptoms={getMostInfluentialSymptoms}
+              listCriticalImbalances={listCriticalImbalances}
             />
 
             {/* DISCLAIMER TEXT */}

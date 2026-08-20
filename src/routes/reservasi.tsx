@@ -1,6 +1,6 @@
 import { createFileRoute } from "@/lib/route";
-import { useState } from "react";
-import { CheckCircle2, ArrowLeft, ArrowRight } from "lucide-react";
+import { useState, useEffect } from "react";
+import { CheckCircle2, ArrowLeft, ArrowRight, MessageCircle } from "lucide-react";
 
 import { PageHeader } from "@/components/site/PageHeader";
 import { serviceOptions, formatPrice, saveReservation, type Reservation } from "@/lib/reservations";
@@ -46,12 +46,44 @@ const emptyForm: FormState = {
   note: "",
 };
 
+function getWaLink(res: Reservation, targetNumber: string) {
+  let cleaned = (targetNumber || "6281369729617").replace(/[^0-9]/g, "");
+  if (cleaned.startsWith("0")) cleaned = "62" + cleaned.substring(1);
+  else if (cleaned.startsWith("8")) cleaned = "62" + cleaned;
+
+  const msg = `Halo Rumah Terapy Ikhtiar Sehat,
+
+Saya baru saja membuat reservasi terapi melalui website dengan detail berikut:
+• Kode Booking: *${res.code}*
+• Nama Pasien: *${res.name}*
+• WhatsApp Pasien: *${res.phone}*
+• Layanan Terapi: *${res.service}*
+• Tanggal Kedatangan: *${res.date}*
+• Jam / Slot: *${res.time}*
+${res.note ? `• Catatan / Keluhan: *${res.note}*\n` : ""}
+Mohon konfirmasi ketersediaan jadwal saya. Terima kasih!`;
+
+  return `https://wa.me/${cleaned}?text=${encodeURIComponent(msg)}`;
+}
+
 function Reservasi() {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [result, setResult] = useState<Reservation | null>(null);
   const [customTime, setCustomTime] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [waNumber, setWaNumber] = useState("6281369729617");
+
+  useEffect(() => {
+    fetch("/api/cms/settings")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.whatsappNumber) {
+          setWaNumber(data.whatsappNumber);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -65,8 +97,10 @@ function Reservasi() {
       if (canContinue) setStep(step + 1);
       return;
     }
+    setSubmitError(null);
     try {
-      setResult(await saveReservation({ ...form }));
+      const saved = await saveReservation({ ...form });
+      setResult(saved);
       setForm(emptyForm);
       setStep(0);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -82,21 +116,59 @@ function Reservasi() {
       <PageHeader
         eyebrow="Reservasi"
         title="Pilih layanan dan waktu Anda"
-        description="Isi tiga langkah berikut. Tim kami akan menghubungi via WhatsApp untuk konfirmasi jadwal."
+        description="Isi tiga langkah berikut. Reservasi akan otomatis terkirim ke WhatsApp resmi klinik."
       />
 
       <section className="mx-auto max-w-5xl px-4 py-14 sm:px-5 sm:py-20">
+        {submitError && (
+          <div className="mb-6 rounded-sm border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+            {submitError}
+          </div>
+        )}
+
         {result && (
-          <div className="mb-10 border border-primary/40 bg-brand-soft/50 p-5 sm:mb-12 sm:p-7">
-            <CheckCircle2 className="size-6 text-primary" />
-            <h2 className="mt-4 text-2xl">Reservasi tercatat</h2>
+          <div className="mb-10 rounded-sm border border-emerald-500/50 bg-emerald-50/60 p-5 dark:bg-emerald-950/30 sm:mb-12 sm:p-7">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="size-6 text-emerald-600 dark:text-emerald-400" />
+              <h2 className="text-2xl font-semibold text-emerald-900 dark:text-emerald-100">
+                Reservasi Berhasil Tercatat!
+              </h2>
+            </div>
             <p className="mt-2 text-sm text-muted-foreground">
-              Simpan kode ini untuk mengecek status reservasi Anda.
+              Kode booking unik Anda telah berhasil dibuat. Simpan kode ini untuk pengecekan status.
             </p>
-            <p className="mt-5 font-display text-3xl tracking-wide text-primary">{result.code}</p>
-            <p className="mt-3 text-sm text-muted-foreground">
-              {result.service} · {result.date} · {result.time}
+            <p className="mt-4 font-display text-3xl font-bold tracking-wide text-emerald-700 dark:text-emerald-300">
+              {result.code}
             </p>
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+              <span>
+                <strong>Layanan:</strong> {result.service}
+              </span>
+              <span>
+                <strong>Tanggal:</strong> {result.date}
+              </span>
+              <span>
+                <strong>Jam:</strong> {result.time}
+              </span>
+              <span>
+                <strong>Pasien:</strong> {result.name} ({result.phone})
+              </span>
+            </div>
+
+            <div className="mt-6 border-t border-emerald-200/80 pt-5 dark:border-emerald-800/80">
+              <p className="text-sm font-medium text-foreground">
+                Kirim detail reservasi ini ke WhatsApp resmi klinik untuk konfirmasi cepat:
+              </p>
+              <a
+                href={getWaLink(result, waNumber)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 inline-flex items-center gap-2.5 rounded-full bg-emerald-600 px-6 py-3 text-sm font-medium text-white shadow-md transition-all hover:bg-emerald-700 active:scale-95"
+              >
+                <MessageCircle className="size-5" />
+                Kirim Reservasi ke WhatsApp Klinik
+              </a>
+            </div>
           </div>
         )}
 
