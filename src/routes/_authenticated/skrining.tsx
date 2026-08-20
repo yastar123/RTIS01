@@ -372,8 +372,10 @@ function Skrining() {
             setKelamin(parsed.kelamin || (data.gender === "Laki-laki" ? "L" : "P"));
             setTinggi(parsed.tinggi ? String(parsed.tinggi) : String(data.height));
             setBerat(parsed.berat ? String(parsed.berat) : String(data.weight));
-            setKeluhan(parsed.keluhan || data.address);
-            setTonguePhoto(parsed.tonguePhoto || data.tonguePhotoUrl);
+            setKeluhan(parsed.keluhan || parsed.complaints || "");
+            setTonguePhoto(
+              parsed.tonguePhoto || parsed.tonguePhotoUrl || data.tonguePhotoUrl || null,
+            );
             setJawaban(parsed.answers || {});
             setRecipientPhone(data.phone || "");
             setStep("result");
@@ -871,7 +873,7 @@ function Skrining() {
           height: parseInt(tinggi) || 165,
           weight: parseInt(berat) || 60,
           phone: user?.phone || "",
-          address: keluhan, // address is used as keluhan/main complaint context if no other table exists
+          address: user?.address || "",
           tonguePhotoUrl: tonguePhoto,
           screeningAnswers: {
             answers: jawaban,

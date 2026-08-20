@@ -129,6 +129,7 @@ interface TcmHerbalReportProps {
     acupressureFunc: string;
   };
   answers?: Record<string, number>;
+  keluhan?: string;
   isAdmin?: boolean;
   getActiveSyndromesString?: () => string;
   getKeluhanUtamaManifestasi?: () => string;
@@ -146,6 +147,7 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
   results: propResults,
   dominant: propDominant,
   answers = {},
+  keluhan,
   isAdmin = false,
   getActiveSyndromesString: propGetActiveSyndromesString,
   getKeluhanUtamaManifestasi: propGetKeluhanUtamaManifestasi,
@@ -157,7 +159,7 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
 }) => {
   const computedResults = propResults || calculateTcmResult(answers, 24);
   const computedDominant = propDominant || getDominantConstitution(computedResults);
-  const helpers = createTcmReportHelpers(answers, computedResults);
+  const helpers = createTcmReportHelpers(answers, computedResults, keluhan);
 
   const results = computedResults;
   const dominant = computedDominant;

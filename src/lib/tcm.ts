@@ -153,6 +153,10 @@ export function createTcmReportHelpers(
   };
 
   const getKeluhanUtamaManifestasi = () => {
+    if (keluhan && typeof keluhan === "string" && keluhan.trim().length > 0) {
+      return keluhan.trim();
+    }
+
     const list: string[] = [];
     if (jawaban["dq1"] && jawaban["dq1"] > 0)
       list.push("mudah merasa lelah dan cepat kehilangan tenaga");
@@ -175,7 +179,7 @@ export function createTcmReportHelpers(
       list.push("buang air besar yang terasa lengket atau basah");
 
     if (list.length === 0) {
-      return keluhan || "mudah merasa lelah, cepat kehilangan tenaga setelah beraktivitas";
+      return "mudah merasa lelah, cepat kehilangan tenaga setelah beraktivitas";
     }
     return list.join(", ");
   };

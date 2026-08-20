@@ -381,7 +381,25 @@ app.post("/api/profile/screening-results", async (req, res) => {
     }
 
     const db = getDb();
-    const answersStr = typeof answers === "string" ? answers : JSON.stringify(answers);
+    let rawAnswers: unknown = answers;
+    if (typeof answers === "string") {
+      try {
+        rawAnswers = JSON.parse(answers);
+      } catch {
+        rawAnswers = answers;
+      }
+    }
+    const cleanAnswers =
+      rawAnswers && typeof rawAnswers === "object" && "answers" in rawAnswers
+        ? (rawAnswers as { answers: unknown }).answers
+        : rawAnswers;
+
+    const answersPayload = {
+      answers: cleanAnswers,
+      complaints: req.body.complaints || "",
+      tonguePhotoUrl: req.body.tonguePhotoUrl || null,
+    };
+    const answersStr = JSON.stringify(answersPayload);
     const aiReportStr = aiReport
       ? typeof aiReport === "string"
         ? aiReport
@@ -419,9 +437,6 @@ app.post("/api/profile/screening-results", async (req, res) => {
       if (req.body.tonguePhotoUrl !== undefined) {
         profileUpdate.tonguePhotoUrl = req.body.tonguePhotoUrl;
       }
-      if (req.body.complaints !== undefined) {
-        profileUpdate.address = req.body.complaints;
-      }
       await db.update(profiles).set(profileUpdate).where(eq(profiles.userId, user.id));
     } else {
       // Create a profile fallback if somehow not present
@@ -433,7 +448,7 @@ app.post("/api/profile/screening-results", async (req, res) => {
         height: 165,
         weight: 60,
         phone: "",
-        address: req.body.complaints || "",
+        address: "",
         tonguePhotoUrl: req.body.tonguePhotoUrl || null,
         screeningAnswers: answersStr,
         screeningCompletedAt: new Date(),
@@ -969,7 +984,7 @@ app.get("/api/admin/screenings", async (req, res) => {
   try {
     if (!(await requireAdmin(req, res))) return;
     const db = getDb();
-    const results = await db
+    const rows = await db
       .select({
         id: screeningResults.id,
         userId: screeningResults.userId,
@@ -986,12 +1001,59 @@ app.get("/api/admin/screenings", async (req, res) => {
         gender: profiles.gender,
         age: profiles.age,
         tonguePhotoUrl: profiles.tonguePhotoUrl,
-        complaints: profiles.address,
+        screeningAnswers: profiles.screeningAnswers,
       })
       .from(screeningResults)
       .leftJoin(users, eq(screeningResults.userId, users.id))
       .leftJoin(profiles, eq(screeningResults.userId, profiles.userId))
       .orderBy(desc(screeningResults.createdAt));
+
+    const results = rows.map((r) => {
+      let complaints = "";
+      let tonguePhotoUrl = r.tonguePhotoUrl;
+      try {
+        const parsed = typeof r.answers === "string" ? JSON.parse(r.answers) : r.answers;
+        if (parsed && typeof parsed === "object") {
+          if ("complaints" in parsed || "keluhan" in parsed) {
+            complaints = String(
+              (parsed as { complaints?: string; keluhan?: string }).complaints ||
+                (parsed as { complaints?: string; keluhan?: string }).keluhan ||
+                "",
+            );
+          }
+          if ("tonguePhotoUrl" in parsed || "tonguePhoto" in parsed) {
+            tonguePhotoUrl =
+              (parsed as { tonguePhotoUrl?: string; tonguePhoto?: string }).tonguePhotoUrl ||
+              (parsed as { tonguePhotoUrl?: string; tonguePhoto?: string }).tonguePhoto ||
+              tonguePhotoUrl;
+          }
+        }
+      } catch {
+        // ignore
+      }
+      if (!complaints && r.screeningAnswers) {
+        try {
+          const parsed =
+            typeof r.screeningAnswers === "string"
+              ? JSON.parse(r.screeningAnswers)
+              : r.screeningAnswers;
+          if (parsed && typeof parsed === "object") {
+            complaints = String(
+              (parsed as { complaints?: string; keluhan?: string }).complaints ||
+                (parsed as { complaints?: string; keluhan?: string }).keluhan ||
+                "",
+            );
+          }
+        } catch {
+          // ignore
+        }
+      }
+      return {
+        ...r,
+        complaints: complaints || "-",
+        tonguePhotoUrl,
+      };
+    });
 
     res.json(results);
   } catch (error) {

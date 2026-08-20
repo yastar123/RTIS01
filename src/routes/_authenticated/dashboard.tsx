@@ -3207,7 +3207,26 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
 
   useEffect(() => {
     if (profile) {
-      if (profile.address && !complaints) setComplaints(profile.address);
+      if (profile.screeningAnswers) {
+        try {
+          const parsed =
+            typeof profile.screeningAnswers === "string"
+              ? JSON.parse(profile.screeningAnswers)
+              : profile.screeningAnswers;
+          if (parsed && typeof parsed === "object") {
+            const storedComplaints = parsed.complaints || parsed.keluhan;
+            if (storedComplaints && !complaints) {
+              setComplaints(storedComplaints);
+            }
+            const storedTongue = parsed.tonguePhotoUrl || parsed.tonguePhoto;
+            if (storedTongue && !tonguePhoto) {
+              setTonguePhoto(storedTongue);
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
       if (profile.tonguePhotoUrl && !tonguePhoto) setTonguePhoto(profile.tonguePhotoUrl);
     }
   }, [profile]);
@@ -3311,7 +3330,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
         gender: profile?.gender === "Perempuan" ? "Perempuan" : "Laki-laki",
         height: profile?.height || 165,
         weight: profile?.weight || 60,
-        complaints: complaints || profile?.address || "",
+        complaints: complaints || "",
         tonguePhoto: tonguePhoto || profile?.tonguePhotoUrl || "",
       };
 
@@ -3389,8 +3408,8 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
       kelamin: profile?.gender === "Perempuan" ? "P" : "L",
       tinggi: profile?.height || 165,
       berat: profile?.weight || 60,
-      keluhan: profile?.address || "",
-      tonguePhoto: profile?.tonguePhotoUrl || "",
+      keluhan: complaints || "",
+      tonguePhoto: profile?.tonguePhotoUrl || tonguePhoto || "",
       answers: answersToUse,
     };
     const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
@@ -3569,7 +3588,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
       kelamin: profile?.gender === "Perempuan" ? "P" : "L",
       tinggi: profile?.height || 165,
       berat: profile?.weight || 60,
-      keluhan: complaints || profile?.address || "",
+      keluhan: complaints || "",
       tonguePhoto: tonguePhoto || profile?.tonguePhotoUrl || "",
       answers: answers,
     };
@@ -3601,7 +3620,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
       kelamin: profile?.gender === "Perempuan" ? "P" : "L",
       tinggi: profile?.height || 165,
       berat: profile?.weight || 60,
-      keluhan: complaints || profile?.address || "",
+      keluhan: complaints || "",
       tonguePhoto: tonguePhoto || profile?.tonguePhotoUrl || "",
       answers: answers,
     };
@@ -4328,17 +4347,24 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                 {/* AI HERBAL REPORT COMPONENT FOR HISTORY ITEM */}
                 {(() => {
                   let parsedAnswers: Record<string, number> = {};
+                  let itemKeluhan = "";
                   try {
-                    parsedAnswers =
+                    const raw =
                       typeof selectedHistoryItem.answers === "string"
                         ? JSON.parse(selectedHistoryItem.answers)
                         : selectedHistoryItem.answers;
+                    if (raw && typeof raw === "object" && "answers" in raw) {
+                      parsedAnswers = raw.answers || {};
+                      itemKeluhan = raw.complaints || raw.keluhan || "";
+                    } else {
+                      parsedAnswers = raw || {};
+                    }
                   } catch (e) {
                     console.error(e);
                   }
                   const calcRes = calculateTcmResult(parsedAnswers, questions.length);
                   const domConst = getDominantConstitution(calcRes);
-                  const helpers = createTcmReportHelpers(parsedAnswers, calcRes, profile?.address);
+                  const helpers = createTcmReportHelpers(parsedAnswers, calcRes, itemKeluhan);
 
                   return (
                     <div className="border-t pt-6 space-y-4 text-left">
@@ -4348,6 +4374,8 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                         onRefreshAi={() => void requestAiAnalysis(parsedAnswers)}
                         results={calcRes}
                         dominant={domConst}
+                        answers={parsedAnswers}
+                        keluhan={itemKeluhan}
                         getActiveSyndromesString={helpers.getActiveSyndromesString}
                         getKeluhanUtamaManifestasi={helpers.getKeluhanUtamaManifestasi}
                         getTop3OrgansString={helpers.getTop3OrgansString}
@@ -5113,7 +5141,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
               {(() => {
                 const calcRes = calculateTcmResult(answers, questions.length);
                 const domConst = getDominantConstitution(calcRes);
-                const helpers = createTcmReportHelpers(answers, calcRes, profile?.address);
+                const helpers = createTcmReportHelpers(answers, calcRes, complaints);
 
                 return (
                   <div className="border-t pt-6 text-left space-y-4">
@@ -5123,6 +5151,8 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                       onRefreshAi={() => void requestAiAnalysis(answers)}
                       results={calcRes}
                       dominant={domConst}
+                      answers={answers}
+                      keluhan={complaints}
                       getActiveSyndromesString={helpers.getActiveSyndromesString}
                       getKeluhanUtamaManifestasi={helpers.getKeluhanUtamaManifestasi}
                       getTop3OrgansString={helpers.getTop3OrgansString}
@@ -5690,8 +5720,8 @@ function UsersTab() {
             ? JSON.parse(u.screeningAnswers)
             : u.screeningAnswers;
         const answers = parsed?.answers || parsed || {};
-        const keluhan = parsed?.keluhan || u.address || "";
-        const tonguePhoto = parsed?.tonguePhoto || u.tonguePhotoUrl || "";
+        const keluhan = parsed?.keluhan || parsed?.complaints || "";
+        const tonguePhoto = parsed?.tonguePhoto || parsed?.tonguePhotoUrl || u.tonguePhotoUrl || "";
 
         const resultPayload = {
           nama: u.fullName || "Pasien",
