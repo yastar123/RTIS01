@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useLocation } from "react-router-dom";
 import {
   Activity,
+  AlertTriangle,
   BookOpen,
   Calendar,
   CalendarDays,
@@ -13,6 +14,7 @@ import {
   ChevronUp,
   Clock,
   ExternalLink,
+  Eye,
   Filter,
   Globe,
   History,
@@ -24,6 +26,7 @@ import {
   PanelLeftClose,
   Pencil,
   Phone,
+  PhoneCall,
   Plus,
   RefreshCw,
   Save,
@@ -54,6 +57,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -409,7 +413,7 @@ export function DashboardPage() {
                         : "Kelola Reservasi Janji Temu"
                       : section === "screening"
                         ? isAdmin
-                          ? "Kelola & Uji Soal Skrening"
+                          ? "Hasil Skrining Pasien & Kelola Soal"
                           : "Skrening Kesehatan"
                         : section === "cms"
                           ? "Kelola Konten Halaman (CMS)"
@@ -2669,6 +2673,228 @@ interface ScreeningResultHistory {
   createdAt: string;
 }
 
+interface AdminScreeningItem {
+  id: string;
+  userId: string;
+  answers: string;
+  score: number;
+  maxScore: number;
+  level: string;
+  advice: string;
+  createdAt: string;
+  userEmail: string | null;
+  fullName: string | null;
+  phone: string | null;
+  gender: string | null;
+  age: number | null;
+  tonguePhotoUrl: string | null;
+  complaints: string | null;
+}
+
+function AdminScreeningDetailModal({
+  item,
+  onClose,
+}: {
+  item: AdminScreeningItem;
+  onClose: () => void;
+}) {
+  const [aiReport, setAiReport] = useState<TcmAiReport | null>(null);
+  const [isLoadingAi, setIsLoadingAi] = useState(false);
+  const [aiError, setAiError] = useState("");
+
+  let parsedAnswers: Record<string, number> = {};
+  try {
+    const raw = typeof item.answers === "string" ? JSON.parse(item.answers) : item.answers;
+    parsedAnswers = typeof raw === "object" && raw !== null ? raw.answers || raw : {};
+  } catch (e) {
+    console.error("Gagal parse jawaban modal:", e);
+  }
+
+  const generateReport = async () => {
+    setIsLoadingAi(true);
+    setAiError("");
+    try {
+      const patientProfile = {
+        name: item.fullName || item.userEmail?.split("@")[0] || "Pasien",
+        age: item.age || 25,
+        gender: item.gender === "Perempuan" ? "Perempuan" : "Laki-laki",
+        height: 165,
+        weight: 60,
+        complaints: item.complaints || "",
+        tonguePhoto: item.tonguePhotoUrl || "",
+      };
+
+      const basicResults = {
+        level: item.level,
+        score: item.score,
+        maxScore: item.maxScore,
+        advice: item.advice,
+      };
+
+      const res = await fetch("/api/screening/generate-ai-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          answers: parsedAnswers,
+          patientProfile,
+          basicResults,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Gagal menghasilkan analisa holistik AI TCM.");
+      const data = await res.json();
+      setAiReport(data);
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "Gagal memuat AI report.");
+    } finally {
+      setIsLoadingAi(false);
+    }
+  };
+
+  useEffect(() => {
+    void generateReport();
+  }, [item.id]);
+
+  return (
+    <Dialog open onOpenChange={() => onClose()}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+        <DialogHeader className="border-b pb-3">
+          <DialogTitle className="font-display text-lg sm:text-xl flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2">
+              <Stethoscope className="h-5 w-5 text-primary" />
+              Laporan Skrining TCM Pasien
+            </span>
+            <Badge variant="outline" className="text-xs">
+              {new Date(item.createdAt).toLocaleDateString("id-ID", { dateStyle: "long" })}
+            </Badge>
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            Data rekam medis skrining mandiri dan analisis rekomendasi terapi TCM &amp; Akupunktur.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-6 pt-2">
+          {/* Patient Info Banner */}
+          <div className="rounded-xl border bg-muted/30 p-4 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+            <div>
+              <span className="text-muted-foreground block text-[10px]">Nama Pasien</span>
+              <strong className="text-sm font-semibold text-foreground">
+                {item.fullName || "Pasien"}
+              </strong>
+            </div>
+
+            <div>
+              <span className="text-muted-foreground block text-[10px]">Email &amp; HP</span>
+              <span className="font-medium text-foreground block">{item.userEmail}</span>
+              <span className="text-primary font-mono">{item.phone || "-"}</span>
+            </div>
+
+            <div>
+              <span className="text-muted-foreground block text-[10px]">Usia &amp; Gender</span>
+              <span className="font-medium text-foreground">
+                {item.age ? `${item.age} Tahun` : "-"} / {item.gender || "-"}
+              </span>
+            </div>
+
+            <div>
+              <span className="text-muted-foreground block text-[10px]">Skor &amp; Risiko</span>
+              <Badge
+                className={
+                  item.level?.toLowerCase() === "tinggi"
+                    ? "bg-rose-100 text-rose-800 border-rose-300"
+                    : item.level?.toLowerCase() === "sedang"
+                      ? "bg-amber-100 text-amber-800 border-amber-300"
+                      : "bg-emerald-100 text-emerald-800 border-emerald-300"
+                }
+              >
+                {item.level || "Rendah"} ({item.score}/{item.maxScore})
+              </Badge>
+            </div>
+          </div>
+
+          {/* Anamnesis / Complaints & Tongue Photo */}
+          {(item.complaints || item.tonguePhotoUrl) && (
+            <div className="rounded-xl border p-4 bg-card space-y-3">
+              <h4 className="font-bold text-xs uppercase tracking-wider text-muted-foreground">
+                Anamnesis Keluhan Pasien
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                {item.complaints && (
+                  <div className="sm:col-span-2 space-y-1">
+                    <span className="font-semibold text-foreground">Keluhan Utama:</span>
+                    <p className="p-2.5 rounded bg-muted/40 text-neutral-800 whitespace-pre-line">
+                      {item.complaints}
+                    </p>
+                  </div>
+                )}
+                {item.tonguePhotoUrl && (
+                  <div className="space-y-1">
+                    <span className="font-semibold text-foreground">Foto Lidah:</span>
+                    <img
+                      src={item.tonguePhotoUrl}
+                      alt="Foto Lidah Pasien"
+                      className="h-28 w-auto rounded border object-cover shadow-2xs"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* AI Report Container */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="font-bold text-sm text-foreground flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-amber-500" />
+                Laporan Analisis Holistik AI TCM
+              </h4>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void generateReport()}
+                disabled={isLoadingAi}
+                className="h-8 text-xs gap-1.5"
+              >
+                {isLoadingAi ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                {aiReport ? "Muat Ulang AI" : "Generate Analisis AI"}
+              </Button>
+            </div>
+
+            {isLoadingAi ? (
+              <div className="rounded-xl border p-8 text-center space-y-2 bg-card">
+                <Loader2 className="mx-auto h-8 w-8 animate-spin text-teal-700" />
+                <p className="text-xs text-muted-foreground">
+                  AI sedang menganalisis pola sindrom TCM, formulasi herbal, dan rekomendasi titik
+                  akupunktur pasien...
+                </p>
+              </div>
+            ) : aiError ? (
+              <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-xs text-destructive flex items-center justify-between">
+                <span>{aiError}</span>
+                <Button size="sm" variant="outline" onClick={() => void generateReport()}>
+                  Coba Lagi
+                </Button>
+              </div>
+            ) : (
+              <TcmHerbalReport report={aiReport} answers={parsedAnswers} isAdmin={true} />
+            )}
+          </div>
+        </div>
+
+        <DialogFooter className="pt-4 border-t mt-4 flex flex-col sm:flex-row gap-2">
+          <Button variant="outline" onClick={onClose} className="text-xs">
+            Tutup
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }) {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -2678,6 +2904,101 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
   const [error, setError] = useState("");
 
   const [adminModeTab, setAdminModeTab] = useState<"results" | "manage" | "test">("results");
+
+  // Admin Screening State
+  const [adminScreenings, setAdminScreenings] = useState<AdminScreeningItem[]>([]);
+  const [isLoadingAdminScreenings, setIsLoadingAdminScreenings] = useState(false);
+  const [adminSearchQuery, setAdminSearchQuery] = useState("");
+  const [adminLevelFilter, setAdminLevelFilter] = useState<"ALL" | "Tinggi" | "Sedang" | "Rendah">(
+    "ALL",
+  );
+  const [selectedAdminDetail, setSelectedAdminDetail] = useState<AdminScreeningItem | null>(null);
+
+  const fetchAdminScreenings = async () => {
+    if (!isAdmin) return;
+    setIsLoadingAdminScreenings(true);
+    try {
+      const res = await fetch("/api/admin/screenings", {
+        headers: authHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAdminScreenings(data);
+      }
+    } catch (err) {
+      console.error("Gagal memuat hasil skrining pasien:", err);
+    } finally {
+      setIsLoadingAdminScreenings(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAdmin) {
+      void fetchAdminScreenings();
+    }
+  }, [isAdmin]);
+
+  const handleDeleteAdminScreening = async (item: AdminScreeningItem) => {
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(`Hapus hasil skrining pasien "${item.fullName || item.userEmail}"?`)
+    ) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/screenings/${item.id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      if (!res.ok) throw new Error("Gagal menghapus hasil skrining.");
+      await fetchAdminScreenings();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Gagal menghapus.");
+    }
+  };
+
+  const handleShareWhatsAppAdmin = (item: AdminScreeningItem) => {
+    if (!item.phone) return;
+    let template =
+      waSettings?.whatsappMessageTemplate ||
+      "Halo [nama],\n\nBerikut adalah hasil skrining TCM Anda. Silakan klik link berikut untuk melihat detail analisis holistik Anda:\n\n[link]\n\nTerima kasih,\nRumah Terapy Ikhtiar Sehat";
+
+    let parsedAns: Record<string, number> = {};
+    try {
+      const raw = typeof item.answers === "string" ? JSON.parse(item.answers) : item.answers;
+      parsedAns = typeof raw === "object" && raw !== null ? raw.answers || raw : {};
+    } catch (e) {
+      console.error(e);
+    }
+
+    const resultPayload = {
+      nama: item.fullName || item.userEmail?.split("@")[0] || "Pasien",
+      usia: item.age || 25,
+      kelamin: item.gender === "Perempuan" ? "P" : "L",
+      tinggi: 165,
+      berat: 60,
+      keluhan: item.complaints || "",
+      tonguePhoto: item.tonguePhotoUrl || "",
+      answers: parsedAns,
+    };
+    const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
+    const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}`;
+
+    template = template.replace(
+      "[nama]",
+      item.fullName || item.userEmail?.split("@")[0] || "Pasien",
+    );
+    template = template.replace("[link]", reportUrl);
+
+    let cleaned = item.phone.replace(/[^0-9]/g, "");
+    if (cleaned.startsWith("0")) cleaned = "62" + cleaned.substring(1);
+    else if (cleaned.startsWith("8")) cleaned = "62" + cleaned;
+
+    window.open(
+      `https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(template)}`,
+      "_blank",
+    );
+  };
 
   // State for adding new question
   const [newQuestionText, setNewQuestionText] = useState("");
@@ -3101,6 +3422,15 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
         <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
           <div className="flex items-center gap-2">
             <Button
+              variant={adminModeTab === "results" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setAdminModeTab("results")}
+              className="text-xs sm:text-sm gap-1.5"
+            >
+              <Stethoscope className="h-4 w-4" />
+              Hasil Skrining Pasien ({adminScreenings.length})
+            </Button>
+            <Button
               variant={adminModeTab === "manage" ? "default" : "outline"}
               size="sm"
               onClick={() => setAdminModeTab("manage")}
@@ -3115,18 +3445,25 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
               onClick={() => setAdminModeTab("test")}
               className="text-xs sm:text-sm gap-1.5"
             >
-              <Stethoscope className="h-4 w-4" />
+              <Eye className="h-4 w-4" />
               Uji Coba Tampilan Pasien
             </Button>
           </div>
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => void fetchQuestions()}
-            disabled={isLoading}
+            onClick={() => {
+              void fetchQuestions();
+              void fetchAdminScreenings();
+            }}
+            disabled={isLoading || isLoadingAdminScreenings}
             className="text-xs text-muted-foreground gap-1.5"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${
+                isLoading || isLoadingAdminScreenings ? "animate-spin" : ""
+              }`}
+            />
             Muat Ulang
           </Button>
         </div>
@@ -3150,6 +3487,307 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
             Coba Lagi
           </Button>
         </Card>
+      ) : isAdmin && adminModeTab === "results" ? (
+        /* ALL PATIENT SCREENINGS CARDS VIEW FOR ADMIN */
+        <div className="space-y-6">
+          {/* Top Summary Stats Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="bg-card">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium">Total Hasil Skrining</p>
+                  <p className="text-2xl font-bold font-display text-foreground mt-1">
+                    {adminScreenings.length}
+                  </p>
+                </div>
+                <div className="h-10 w-10 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                  <Stethoscope className="h-5 w-5" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium">Risiko Tinggi</p>
+                  <p className="text-2xl font-bold font-display text-rose-600 mt-1">
+                    {adminScreenings.filter((s) => s.level?.toLowerCase() === "tinggi").length}
+                  </p>
+                </div>
+                <div className="h-10 w-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium">Risiko Sedang</p>
+                  <p className="text-2xl font-bold font-display text-amber-600 mt-1">
+                    {adminScreenings.filter((s) => s.level?.toLowerCase() === "sedang").length}
+                  </p>
+                </div>
+                <div className="h-10 w-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center">
+                  <Activity className="h-5 w-5" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium">Risiko Rendah</p>
+                  <p className="text-2xl font-bold font-display text-emerald-600 mt-1">
+                    {
+                      adminScreenings.filter((s) => s.level?.toLowerCase() === "rendah" || !s.level)
+                        .length
+                    }
+                  </p>
+                </div>
+                <div className="h-10 w-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <CheckCircle2 className="h-5 w-5" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* List/Search Header */}
+          <Card className="bg-card">
+            <CardHeader className="pb-3">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                    <Stethoscope className="h-5 w-5 text-primary" />
+                    Daftar Skrining Kesehatan Seluruh Pasien
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Admin dapat memeriksa rekam medis skrining mandiri, skor risiko, dan rekomendasi
+                    terapi holistik TCM setiap pasien.
+                  </CardDescription>
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void fetchAdminScreenings()}
+                  disabled={isLoadingAdminScreenings}
+                  className="gap-1.5 text-xs self-start md:self-auto"
+                >
+                  <RefreshCw
+                    className={`h-3.5 w-3.5 ${isLoadingAdminScreenings ? "animate-spin" : ""}`}
+                  />
+                  Muat Ulang
+                </Button>
+              </div>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+              <div className="flex flex-col sm:flex-row gap-3 justify-between">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Cari nama pasien, email, telepon, atau keluhan..."
+                    value={adminSearchQuery}
+                    onChange={(e) => setAdminSearchQuery(e.target.value)}
+                    className="pl-9 text-xs sm:text-sm"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                  <Button
+                    variant={adminLevelFilter === "ALL" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setAdminLevelFilter("ALL")}
+                    className="text-xs h-8"
+                  >
+                    Semua ({adminScreenings.length})
+                  </Button>
+                  <Button
+                    variant={adminLevelFilter === "Tinggi" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setAdminLevelFilter("Tinggi")}
+                    className="text-xs h-8 text-rose-600 border-rose-200 hover:bg-rose-50"
+                  >
+                    Tinggi (
+                    {adminScreenings.filter((s) => s.level?.toLowerCase() === "tinggi").length})
+                  </Button>
+                  <Button
+                    variant={adminLevelFilter === "Sedang" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setAdminLevelFilter("Sedang")}
+                    className="text-xs h-8 text-amber-600 border-amber-200 hover:bg-amber-50"
+                  >
+                    Sedang (
+                    {adminScreenings.filter((s) => s.level?.toLowerCase() === "sedang").length})
+                  </Button>
+                  <Button
+                    variant={adminLevelFilter === "Rendah" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setAdminLevelFilter("Rendah")}
+                    className="text-xs h-8 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                  >
+                    Rendah (
+                    {
+                      adminScreenings.filter((s) => s.level?.toLowerCase() === "rendah" || !s.level)
+                        .length
+                    }
+                    )
+                  </Button>
+                </div>
+              </div>
+
+              {/* Patient Screenings List */}
+              {isLoadingAdminScreenings ? (
+                <div className="p-8 text-center text-xs text-muted-foreground">
+                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary mb-2" />
+                  Memuat data skrining pasien...
+                </div>
+              ) : (
+                (() => {
+                  const filtered = adminScreenings.filter((item) => {
+                    const matchQuery = [
+                      item.fullName,
+                      item.userEmail,
+                      item.phone,
+                      item.complaints,
+                      item.advice,
+                    ]
+                      .filter(Boolean)
+                      .join(" ")
+                      .toLowerCase()
+                      .includes(adminSearchQuery.toLowerCase());
+
+                    const matchLevel =
+                      adminLevelFilter === "ALL" ||
+                      item.level?.toLowerCase() === adminLevelFilter.toLowerCase();
+
+                    return matchQuery && matchLevel;
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="rounded-xl border border-dashed p-8 text-center text-xs text-muted-foreground">
+                        Tidak ada data hasil skrining pasien yang ditemukan.
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {filtered.map((item) => {
+                          const isHigh = item.level?.toLowerCase() === "tinggi";
+                          const isMed = item.level?.toLowerCase() === "sedang";
+
+                          return (
+                            <Card
+                              key={item.id}
+                              className="bg-card border hover:border-primary/40 transition-colors shadow-2xs"
+                            >
+                              <CardContent className="p-4 space-y-3">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <div className="font-bold text-sm text-foreground">
+                                      {item.fullName || item.userEmail?.split("@")[0] || "Pasien"}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      {item.userEmail}
+                                    </div>
+                                    {item.phone && (
+                                      <div className="text-xs text-primary font-mono mt-0.5">
+                                        {item.phone}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <Badge
+                                    className={
+                                      isHigh
+                                        ? "bg-rose-100 text-rose-800 border-rose-300 font-semibold"
+                                        : isMed
+                                          ? "bg-amber-100 text-amber-800 border-amber-300 font-semibold"
+                                          : "bg-emerald-100 text-emerald-800 border-emerald-300 font-semibold"
+                                    }
+                                  >
+                                    Risiko: {item.level || "Rendah"}
+                                  </Badge>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 text-xs bg-muted/40 p-2.5 rounded-lg">
+                                  <div>
+                                    <span className="text-muted-foreground block text-[10px]">
+                                      Tanggal:
+                                    </span>
+                                    <span className="font-medium">
+                                      {new Date(item.createdAt).toLocaleDateString("id-ID", {
+                                        day: "numeric",
+                                        month: "short",
+                                        year: "numeric",
+                                      })}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground block text-[10px]">
+                                      Skor Jawaban:
+                                    </span>
+                                    <span className="font-mono font-bold text-primary">
+                                      {item.score} / {item.maxScore}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {(item.complaints || item.advice) && (
+                                  <p className="text-xs text-muted-foreground line-clamp-2 bg-background p-2 rounded border">
+                                    <strong>Keluhan/Saran:</strong> {item.complaints || item.advice}
+                                  </p>
+                                )}
+
+                                <div className="flex items-center justify-between pt-1 gap-2 border-t">
+                                  <Button
+                                    variant="default"
+                                    size="sm"
+                                    onClick={() => setSelectedAdminDetail(item)}
+                                    className="text-xs gap-1.5 bg-teal-700 hover:bg-teal-800 text-white flex-1"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" />
+                                    Lihat Laporan AI Pasien
+                                  </Button>
+
+                                  {item.phone && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleShareWhatsAppAdmin(item)}
+                                      className="text-xs gap-1 text-emerald-700 border-emerald-300 hover:bg-emerald-50 shrink-0"
+                                      title="Kirim WA ke Pasien"
+                                    >
+                                      <PhoneCall className="h-3.5 w-3.5" />
+                                      <span className="hidden sm:inline">WA</span>
+                                    </Button>
+                                  )}
+
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => void handleDeleteAdminScreening(item)}
+                                    className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 shrink-0"
+                                    title="Hapus Hasil Skrining"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()
+              )}
+            </CardContent>
+          </Card>
+        </div>
       ) : isAdmin && adminModeTab === "manage" ? (
         /* ADMIN MANAGEMENT PANEL */
         <div className="space-y-6">
@@ -3805,6 +4443,13 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
             </Button>
           </div>
         </Card>
+      )}
+
+      {selectedAdminDetail && (
+        <AdminScreeningDetailModal
+          item={selectedAdminDetail}
+          onClose={() => setSelectedAdminDetail(null)}
+        />
       )}
     </div>
   );
