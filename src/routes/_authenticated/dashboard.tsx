@@ -37,7 +37,12 @@ import {
   Users,
   MapPin,
   X,
+  Sparkles,
+  FileText,
+  Printer,
 } from "lucide-react";
+import { TcmHerbalReport, type TcmAiReport } from "@/components/screening/TcmHerbalReport";
+import { calculateTcmResult, getDominantConstitution, createTcmReportHelpers } from "@/lib/tcm";
 import { useAuth, useProfile, authHeaders } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -2719,6 +2724,86 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
   const [historyDetailQuestionsPage, setHistoryDetailQuestionsPage] = useState(1);
   const [submittedQuestionsPage, setSubmittedQuestionsPage] = useState(1);
 
+  // AI Generated TCM & Herbal Report State
+  const [aiReport, setAiReport] = useState<TcmAiReport | null>(null);
+  const [isLoadingAi, setIsLoadingAi] = useState(false);
+
+  const requestAiAnalysis = async (answersToUse: Record<string, number>) => {
+    setIsLoadingAi(true);
+    try {
+      const currentProfile = {
+        name: profile?.fullName || user?.email?.split("@")[0] || "Pasien",
+        age: profile?.age || 25,
+        gender: profile?.gender === "Perempuan" ? "Perempuan" : "Laki-laki",
+        height: profile?.height || 165,
+        weight: profile?.weight || 60,
+        complaints: profile?.address || "",
+        tonguePhoto: profile?.tonguePhotoUrl || "",
+      };
+
+      const calculatedResults = calculateTcmResult(answersToUse, questions.length);
+
+      const res = await fetch("/api/screening/generate-ai-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          answers: answersToUse,
+          questions,
+          patientProfile: currentProfile,
+          basicResults: calculatedResults,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAiReport(data);
+      }
+    } catch (err) {
+      console.error("Gagal mendapatkan analisa AI:", err);
+    } finally {
+      setIsLoadingAi(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isSubmitted && Object.keys(answers).length > 0 && !aiReport && !isLoadingAi) {
+      void requestAiAnalysis(answers);
+    }
+  }, [isSubmitted]);
+
+  useEffect(() => {
+    if (selectedHistoryItem) {
+      try {
+        const parsedAnswers =
+          typeof selectedHistoryItem.answers === "string"
+            ? JSON.parse(selectedHistoryItem.answers)
+            : selectedHistoryItem.answers;
+        if (parsedAnswers && Object.keys(parsedAnswers).length > 0) {
+          void requestAiAnalysis(parsedAnswers);
+        }
+      } catch (e) {
+        console.error("Error parsing history answers:", e);
+      }
+    } else if (!isSubmitted) {
+      setAiReport(null);
+    }
+  }, [selectedHistoryItem]);
+
+  const getFullReportPageUrl = (customAnswers?: Record<string, number>) => {
+    const answersToUse = customAnswers || answers;
+    const resultPayload = {
+      nama: profile?.fullName || user?.email?.split("@")[0] || "Pasien",
+      usia: profile?.age || 25,
+      kelamin: profile?.gender === "Perempuan" ? "P" : "L",
+      tinggi: profile?.height || 165,
+      berat: profile?.weight || 60,
+      keluhan: profile?.address || "",
+      tonguePhoto: profile?.tonguePhotoUrl || "",
+      answers: answersToUse,
+    };
+    const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
+    return `/skrining?resultData=${encodedPayload}`;
+  };
+
   const fetchHistory = async () => {
     if (isAdmin) return;
     setIsLoadingHistory(true);
@@ -3243,6 +3328,42 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
               </span>
             </div>
 
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-primary/10 border border-primary/20 rounded-xl p-4 text-left">
+              <div className="flex items-center gap-2.5">
+                <Sparkles className="h-5 w-5 text-primary shrink-0" />
+                <div>
+                  <h4 className="font-bold text-sm text-foreground">
+                    Laporan Analisis Herbal AI & Pemetaan Holistik TCM
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Mencakup rekomendasi Herbal Indonesia, Herbal China, Titik Akupresur, & Pola
+                    Sindrom TCM.
+                  </p>
+                </div>
+              </div>
+              {(() => {
+                let parsedAnswers: Record<string, number> = {};
+                try {
+                  parsedAnswers =
+                    typeof selectedHistoryItem.answers === "string"
+                      ? JSON.parse(selectedHistoryItem.answers)
+                      : selectedHistoryItem.answers;
+                } catch (e) {
+                  console.error(e);
+                }
+                return (
+                  <a
+                    href={getFullReportPageUrl(parsedAnswers)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-xs hover:opacity-95 shrink-0"
+                  >
+                    <Printer className="h-4 w-4" /> Cetak / Unduh Laporan Resmi PDF
+                  </a>
+                );
+              })()}
+            </div>
+
             <div className="text-center space-y-4">
               <Badge
                 className={`px-3 py-1 text-xs border ${
@@ -3266,6 +3387,41 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                 <strong>{selectedHistoryItem.maxScore}</strong>
               </p>
             </div>
+
+            {/* AI HERBAL REPORT COMPONENT FOR HISTORY ITEM */}
+            {(() => {
+              let parsedAnswers: Record<string, number> = {};
+              try {
+                parsedAnswers =
+                  typeof selectedHistoryItem.answers === "string"
+                    ? JSON.parse(selectedHistoryItem.answers)
+                    : selectedHistoryItem.answers;
+              } catch (e) {
+                console.error(e);
+              }
+              const calcRes = calculateTcmResult(parsedAnswers, questions.length);
+              const domConst = getDominantConstitution(calcRes);
+              const helpers = createTcmReportHelpers(parsedAnswers, calcRes, profile?.address);
+
+              return (
+                <div className="border-t pt-6 space-y-4 text-left">
+                  <TcmHerbalReport
+                    report={aiReport}
+                    isLoadingAi={isLoadingAi}
+                    onRefreshAi={() => void requestAiAnalysis(parsedAnswers)}
+                    results={calcRes}
+                    dominant={domConst}
+                    getActiveSyndromesString={helpers.getActiveSyndromesString}
+                    getKeluhanUtamaManifestasi={helpers.getKeluhanUtamaManifestasi}
+                    getTop3OrgansString={helpers.getTop3OrgansString}
+                    getPrimaryTherapeuticPriority={helpers.getPrimaryTherapeuticPriority}
+                    getTop3OrgansList={helpers.getTop3OrgansList}
+                    getMostInfluentialSymptoms={helpers.getMostInfluentialSymptoms}
+                    listCriticalImbalances={helpers.listCriticalImbalances}
+                  />
+                </div>
+              );
+            })()}
 
             <div className="border-t pt-6 space-y-4">
               <div className="flex items-center justify-between">
@@ -3478,6 +3634,30 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
         </div>
       ) : (
         <Card className="bg-card p-5 sm:p-8 shadow-xs text-center space-y-6">
+          {/* Top Banner with Button to Full Printable Report */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 text-left">
+            <div className="flex items-center gap-2.5">
+              <Sparkles className="h-5 w-5 text-emerald-600 shrink-0" />
+              <div>
+                <h4 className="font-bold text-sm text-emerald-950">
+                  Laporan Analisis AI Herbal Berhasil Dihasilkan!
+                </h4>
+                <p className="text-xs text-emerald-800">
+                  Rekomendasi lengkap Herbal Indonesia, Herbal China (TCM), & Akupresur telah
+                  tersedia.
+                </p>
+              </div>
+            </div>
+            <a
+              href={getFullReportPageUrl(answers)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 shrink-0"
+            >
+              <Printer className="h-4 w-4" /> Cetak / Unduh Laporan Resmi PDF
+            </a>
+          </div>
+
           <div className="space-y-3">
             <Badge className={`px-3 py-1 text-xs border ${getResult().color}`}>
               Tingkat Risiko: {getResult().level}
@@ -3493,6 +3673,32 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
               <strong>{maxPossibleScore}</strong> ({questions.length} soal)
             </p>
           </div>
+
+          {/* AI HERBAL REPORT COMPONENT FOR NEW SUBMISSION */}
+          {(() => {
+            const calcRes = calculateTcmResult(answers, questions.length);
+            const domConst = getDominantConstitution(calcRes);
+            const helpers = createTcmReportHelpers(answers, calcRes, profile?.address);
+
+            return (
+              <div className="border-t pt-6 text-left space-y-4">
+                <TcmHerbalReport
+                  report={aiReport}
+                  isLoadingAi={isLoadingAi}
+                  onRefreshAi={() => void requestAiAnalysis(answers)}
+                  results={calcRes}
+                  dominant={domConst}
+                  getActiveSyndromesString={helpers.getActiveSyndromesString}
+                  getKeluhanUtamaManifestasi={helpers.getKeluhanUtamaManifestasi}
+                  getTop3OrgansString={helpers.getTop3OrgansString}
+                  getPrimaryTherapeuticPriority={helpers.getPrimaryTherapeuticPriority}
+                  getTop3OrgansList={helpers.getTop3OrgansList}
+                  getMostInfluentialSymptoms={helpers.getMostInfluentialSymptoms}
+                  listCriticalImbalances={helpers.listCriticalImbalances}
+                />
+              </div>
+            );
+          })()}
 
           {/* Questionnaire response history with pagination */}
           <div className="border-t pt-6 space-y-4 text-left">
