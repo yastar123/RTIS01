@@ -396,7 +396,7 @@ export function DashboardPage() {
         </aside>
 
         {/* Main Content Area */}
-        <main className="min-w-0 flex-1 p-3 sm:p-6 lg:p-8">
+        <main className="min-w-0 flex-1 w-full p-3 sm:p-5 lg:p-6">
           <div className="mb-6 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="eyebrow text-xs">
@@ -1472,7 +1472,7 @@ function ProfileTab() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="w-full space-y-6">
       {message && (
         <div
           className={`rounded-lg p-4 text-sm ${
@@ -2030,7 +2030,7 @@ function ReservationsTab() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       {/* Navigation Sub-Tabs */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
         <div className="flex flex-wrap gap-2">
@@ -3564,7 +3564,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
   };
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="w-full space-y-6">
       {isAdmin && selectedAdminDetail ? (
         <AdminScreeningDetailView
           item={selectedAdminDetail}
@@ -5873,7 +5873,7 @@ function SettingsTab() {
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
         ) : (
-          <form onSubmit={handleSave} className="max-w-2xl space-y-6">
+          <form onSubmit={handleSave} className="w-full space-y-6">
             <div className="space-y-2">
               <Label htmlFor="wa-num">Nomor WhatsApp Klinik *</Label>
               <div className="relative">

@@ -485,7 +485,7 @@ function AdminPage() {
         </aside>
 
         {/* Main Content Area */}
-        <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
+        <main className="min-w-0 flex-1 w-full p-3 sm:p-5 lg:p-6">
           <div className="mb-6 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="eyebrow text-xs">Selamat datang kembali</p>
