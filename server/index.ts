@@ -1454,6 +1454,50 @@ app.get("/api/settings", async (req, res) => {
   }
 });
 
+app.get("/api/admin/settings", async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    const db = getDb();
+    const [row] = await db
+      .select()
+      .from(cmsContent)
+      .where(eq(cmsContent.pageKey, "settings"))
+      .limit(1);
+    if (row) {
+      const parsed = JSON.parse(row.contentJson);
+      if (!parsed.whatsappMessageTemplate) {
+        parsed.whatsappMessageTemplate =
+          "Halo [nama],\n\nBerikut adalah hasil skrining TCM Anda. Silakan klik link berikut untuk melihat detail analisis holistik Anda:\n\n[link]\n\nTerima kasih,\nRumah Terapy Ikhtiar Sehat";
+      }
+      if (!parsed.whatsappFreeConsultationTemplate) {
+        parsed.whatsappFreeConsultationTemplate =
+          "Halo [nama],\n\nKabar gembira! Rumah Terapy Ikhtiar Sehat sedang membuka layanan Konsultasi Kesehatan TCM Gratis secara online. Silakan klik link berikut untuk memulai konsultasi gratis Anda dengan praktisi kami:\n\n[link]\n\nYuk, jaga kesehatan tubuh Anda secara alami!\nSalam sehat,\nRumah Terapy Ikhtiar Sehat";
+      }
+      return res.json(parsed);
+    }
+    const defaultSettings = {
+      whatsappNumber: "6281369729617",
+      whatsappMessageTemplate:
+        "Halo [nama],\n\nBerikut adalah hasil skrining TCM Anda. Silakan klik link berikut untuk melihat detail analisis holistik Anda:\n\n[link]\n\nTerima kasih,\nRumah Terapy Ikhtiar Sehat",
+      whatsappFreeConsultationTemplate:
+        "Halo [nama],\n\nKabar gembira! Rumah Terapy Ikhtiar Sehat sedang membuka layanan Konsultasi Kesehatan TCM Gratis secara online. Silakan klik link berikut untuk memulai konsultasi gratis Anda dengan praktisi kami:\n\n[link]\n\nYuk, jaga kesehatan tubuh Anda secara alami!\nSalam sehat,\nRumah Terapy Ikhtiar Sehat",
+    };
+    await db.insert(cmsContent).values({
+      pageKey: "settings",
+      title: "Settings",
+      description: "Application configurations",
+      heroTitle: "Configurations",
+      heroSubtitle: "Global settings of the system",
+      contentJson: JSON.stringify(defaultSettings),
+    });
+    res.json(defaultSettings);
+  } catch (error) {
+    res
+      .status(503)
+      .json({ message: error instanceof Error ? error.message : "Gagal memuat pengaturan." });
+  }
+});
+
 app.put("/api/admin/settings", async (req, res) => {
   try {
     if (!(await requireAdmin(req, res))) return;
