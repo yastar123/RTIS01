@@ -1160,7 +1160,9 @@ function Skrining() {
     return list;
   };
 
-  const handleDownloadPdf = async () => {
+  const handleDownloadPdf = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     const element = document.getElementById("tcm-screening-report");
     if (!element) {
       toast.error("Format laporan tidak ditemukan di halaman ini.");
