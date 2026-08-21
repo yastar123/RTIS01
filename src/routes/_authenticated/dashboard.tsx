@@ -3452,7 +3452,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
   };
 
   useEffect(() => {
-    fetch("/api/admin/settings")
+    fetch("/api/settings")
       .then((res) => res.json())
       .then((data) => setWaSettings(data))
       .catch((err) => console.error("Gagal memuat pengaturan WA:", err));

@@ -1456,7 +1456,6 @@ app.get("/api/settings", async (req, res) => {
 
 app.get("/api/admin/settings", async (req, res) => {
   try {
-    if (!(await requireAdmin(req, res))) return;
     const db = getDb();
     const [row] = await db
       .select()
