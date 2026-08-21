@@ -1411,7 +1411,8 @@ function Skrining() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                       {hospitalDocs.map((doc) => {
                         const isImage =
-                          doc.type.startsWith("image/") || doc.url.startsWith("data:image/");
+                          doc.url &&
+                          (doc.type.startsWith("image/") || doc.url.startsWith("data:image/"));
                         return (
                           <div
                             key={doc.id}
@@ -1721,7 +1722,8 @@ function Skrining() {
                   {hospitalDocs.length > 0 ? (
                     hospitalDocs.map((doc) => {
                       const isImg =
-                        doc.type.startsWith("image/") || doc.url.startsWith("data:image/");
+                        doc.url &&
+                        (doc.type.startsWith("image/") || doc.url.startsWith("data:image/"));
                       return (
                         <div
                           key={doc.id}
