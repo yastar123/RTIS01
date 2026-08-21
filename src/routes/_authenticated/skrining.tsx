@@ -1,4 +1,6 @@
 import { useState, useEffect, FormEvent, useRef, useCallback } from "react";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 import { createFileRoute, Link } from "@/lib/route";
 import { useAuth, authHeaders, useProfile } from "@/hooks/use-auth";
 import { PageHeader } from "@/components/site/PageHeader";
@@ -362,6 +364,54 @@ function Skrining() {
           setJawaban(decoded.answers || {});
           setStep("result");
           setSubmitted(true);
+
+          // Fallback if assets are missing but userId is provided
+          if (
+            sharedUserId &&
+            (!decoded.tonguePhoto ||
+              decoded.tonguePhoto === "" ||
+              !decoded.hospitalDocs ||
+              decoded.hospitalDocs.length === 0)
+          ) {
+            fetch(`/api/profile/${sharedUserId}/screening`)
+              .then((res) => {
+                if (res.ok) return res.json();
+                throw new Error();
+              })
+              .then((data) => {
+                if (data) {
+                  if (data.tonguePhotoUrl && (!decoded.tonguePhoto || decoded.tonguePhoto === "")) {
+                    setTonguePhoto(data.tonguePhotoUrl);
+                  }
+                  if (data.screeningAnswers) {
+                    try {
+                      const parsed =
+                        typeof data.screeningAnswers === "string"
+                          ? JSON.parse(data.screeningAnswers)
+                          : data.screeningAnswers;
+                      if (
+                        parsed.tonguePhoto &&
+                        (!decoded.tonguePhoto || decoded.tonguePhoto === "")
+                      ) {
+                        setTonguePhoto(parsed.tonguePhoto);
+                      }
+                      if (
+                        parsed.hospitalDocs &&
+                        parsed.hospitalDocs.length > 0 &&
+                        (!decoded.hospitalDocs || decoded.hospitalDocs.length === 0)
+                      ) {
+                        setHospitalDocs(parsed.hospitalDocs);
+                      }
+                    } catch (e) {
+                      console.error("Gagal parse screeningAnswers tambahan:", e);
+                    }
+                  }
+                }
+              })
+              .catch((err) => {
+                console.error("Gagal memuat detail foto/dokumen tambahan:", err);
+              });
+          }
         }
       } catch (err) {
         console.error("Gagal memendekkan/mengurai data skrining:", err);
@@ -412,6 +462,13 @@ function Skrining() {
       if (profile.weight) setBerat(String(profile.weight));
     }
   }, [profile, recipientPhone, isViewingShared, nama]);
+
+  // Sync profile tonguePhoto if it's missing in local state
+  useEffect(() => {
+    if (profile?.tonguePhotoUrl && !tonguePhoto) {
+      setTonguePhoto(profile.tonguePhotoUrl);
+    }
+  }, [profile, tonguePhoto]);
 
   // Sync user name when user loads
   useEffect(() => {
@@ -2032,7 +2089,42 @@ function Skrining() {
               </Link>
               <button
                 type="button"
-                onClick={() => window.print()}
+                onClick={async () => {
+                  const element = document.getElementById("tcm-screening-report");
+                  if (element) {
+                    try {
+                      const canvas = await html2canvas(element, {
+                        scale: 2,
+                        useCORS: true,
+                        logging: false,
+                      });
+                      const imgData = canvas.toDataURL("image/png");
+                      const pdf = new jsPDF("p", "mm", "a4");
+                      const pdfWidth = pdf.internal.pageSize.getWidth();
+                      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+                      let heightLeft = pdfHeight;
+                      let position = 0;
+
+                      pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
+                      heightLeft -= pdf.internal.pageSize.getHeight();
+
+                      while (heightLeft >= 0) {
+                        position = heightLeft - pdfHeight;
+                        pdf.addPage();
+                        pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
+                        heightLeft -= pdf.internal.pageSize.getHeight();
+                      }
+
+                      pdf.save("Laporan-Skrining-TCM.pdf");
+                    } catch (err) {
+                      console.error("PDF generation error:", err);
+                      window.print();
+                    }
+                  } else {
+                    window.print();
+                  }
+                }}
                 className="flex items-center gap-2 rounded-full bg-neutral-800 px-6 py-3 text-xs font-semibold text-white hover:bg-neutral-900 transition-all"
               >
                 <Printer className="h-4 w-4" />

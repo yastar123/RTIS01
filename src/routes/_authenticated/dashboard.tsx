@@ -2837,11 +2837,15 @@ function AdminScreeningDetailView({
       tinggi: 165,
       berat: 60,
       keluhan: item.complaints || "",
-      tonguePhoto: item.tonguePhotoUrl || "",
+      tonguePhoto:
+        item.tonguePhotoUrl &&
+        (item.tonguePhotoUrl.startsWith("data:") || item.tonguePhotoUrl.length > 1000)
+          ? ""
+          : item.tonguePhotoUrl || "",
       answers: parsedAnswers,
     };
     const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
-    const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}`;
+    const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}${item.userId ? `&userId=${item.userId}` : ""}`;
 
     template = template.replace(
       "[nama]",
@@ -2867,11 +2871,15 @@ function AdminScreeningDetailView({
       tinggi: 165,
       berat: 60,
       keluhan: item.complaints || "",
-      tonguePhoto: item.tonguePhotoUrl || "",
+      tonguePhoto:
+        item.tonguePhotoUrl &&
+        (item.tonguePhotoUrl.startsWith("data:") || item.tonguePhotoUrl.length > 1000)
+          ? ""
+          : item.tonguePhotoUrl || "",
       answers: parsedAnswers,
     };
     const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
-    return `/skrining?resultData=${encodedPayload}`;
+    return `/skrining?resultData=${encodedPayload}${item.userId ? `&userId=${item.userId}` : ""}`;
   };
 
   const calcRes = calculateTcmResult(parsedAnswers, allQuestions.length || 24);
@@ -3230,11 +3238,15 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
       tinggi: 165,
       berat: 60,
       keluhan: item.complaints || "",
-      tonguePhoto: item.tonguePhotoUrl || "",
+      tonguePhoto:
+        item.tonguePhotoUrl &&
+        (item.tonguePhotoUrl.startsWith("data:") || item.tonguePhotoUrl.length > 1000)
+          ? ""
+          : item.tonguePhotoUrl || "",
       answers: parsedAns,
     };
     const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
-    const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}`;
+    const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}${item.userId ? `&userId=${item.userId}` : ""}`;
 
     template = template.replace(
       "[nama]",
@@ -3559,6 +3571,24 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
 
   const getFullReportPageUrl = (customAnswers?: Record<string, number>) => {
     const answersToUse = customAnswers || answers;
+    const cleanTonguePhoto = profile?.tonguePhotoUrl || tonguePhoto || "";
+    const cleanTonguePhotoStr =
+      cleanTonguePhoto && (cleanTonguePhoto.startsWith("data:") || cleanTonguePhoto.length > 1000)
+        ? ""
+        : cleanTonguePhoto;
+
+    const cleanHospitalDocs = (hospitalDocs || [])
+      .map((doc: MedicalDocumentItem) => {
+        if (!doc) return doc;
+        if (doc.url && (doc.url.startsWith("data:") || doc.url.length > 1000)) {
+          return { ...doc, url: "" };
+        }
+        return doc;
+      })
+      .filter((doc: MedicalDocumentItem) => {
+        return !!doc && !!doc.url;
+      });
+
     const resultPayload = {
       nama: profile?.fullName || user?.email?.split("@")[0] || "Pasien",
       usia: profile?.age || 25,
@@ -3566,12 +3596,13 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
       tinggi: profile?.height || 165,
       berat: profile?.weight || 60,
       keluhan: complaints || "",
-      tonguePhoto: profile?.tonguePhotoUrl || tonguePhoto || "",
-      hospitalDocs: hospitalDocs || [],
+      tonguePhoto: cleanTonguePhotoStr,
+      hospitalDocs: cleanHospitalDocs,
       answers: answersToUse,
     };
     const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
-    return `/skrining?resultData=${encodedPayload}`;
+    const userIdVal = profile?.userId || user?.id;
+    return `/skrining?resultData=${encodedPayload}${userIdVal ? `&userId=${userIdVal}` : ""}`;
   };
 
   const fetchHistory = async () => {
@@ -3740,6 +3771,24 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
       waSettings?.whatsappMessageTemplate ||
       "Halo [nama],\n\nBerikut adalah hasil skrining TCM Anda. Silakan klik link berikut untuk melihat detail analisis holistik Anda:\n\n[link]\n\nTerima kasih,\nRumah Terapy Ikhtiar Sehat";
 
+    const rawTonguePhoto = tonguePhoto || profile?.tonguePhotoUrl || "";
+    const cleanTonguePhotoStr =
+      rawTonguePhoto && (rawTonguePhoto.startsWith("data:") || rawTonguePhoto.length > 1000)
+        ? ""
+        : rawTonguePhoto;
+
+    const cleanHospitalDocs = (hospitalDocs || [])
+      .map((doc: MedicalDocumentItem) => {
+        if (!doc) return doc;
+        if (doc.url && (doc.url.startsWith("data:") || doc.url.length > 1000)) {
+          return { ...doc, url: "" };
+        }
+        return doc;
+      })
+      .filter((doc: MedicalDocumentItem) => {
+        return !!doc && !!doc.url;
+      });
+
     const resultPayload = {
       nama: profile?.fullName || user?.email.split("@")[0] || "Pasien",
       usia: profile?.age || 25,
@@ -3747,12 +3796,13 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
       tinggi: profile?.height || 165,
       berat: profile?.weight || 60,
       keluhan: complaints || "",
-      tonguePhoto: tonguePhoto || profile?.tonguePhotoUrl || "",
-      hospitalDocs: hospitalDocs || [],
+      tonguePhoto: cleanTonguePhotoStr,
+      hospitalDocs: cleanHospitalDocs,
       answers: answers,
     };
     const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
-    const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}`;
+    const userIdVal = profile?.userId || user?.id;
+    const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}${userIdVal ? `&userId=${userIdVal}` : ""}`;
     const name = profile?.fullName || user?.email.split("@")[0] || "Pasien";
 
     template = template.replace("[nama]", name);
@@ -3773,6 +3823,24 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
     let template =
       "Halo Rumah Terapy Ikhtiar Sehat,\n\nSaya telah menyelesaikan skrining mandiri TCM di website dengan hasil:\nTingkat Risiko: [level]\nSkor: [skor]/[maxSkor]\n\nLink hasil skrining saya:\n[link]";
 
+    const rawTonguePhoto = tonguePhoto || profile?.tonguePhotoUrl || "";
+    const cleanTonguePhotoStr =
+      rawTonguePhoto && (rawTonguePhoto.startsWith("data:") || rawTonguePhoto.length > 1000)
+        ? ""
+        : rawTonguePhoto;
+
+    const cleanHospitalDocs = (hospitalDocs || [])
+      .map((doc: MedicalDocumentItem) => {
+        if (!doc) return doc;
+        if (doc.url && (doc.url.startsWith("data:") || doc.url.length > 1000)) {
+          return { ...doc, url: "" };
+        }
+        return doc;
+      })
+      .filter((doc: MedicalDocumentItem) => {
+        return !!doc && !!doc.url;
+      });
+
     const resultPayload = {
       nama: profile?.fullName || user?.email.split("@")[0] || "Pasien",
       usia: profile?.age || 25,
@@ -3780,12 +3848,13 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
       tinggi: profile?.height || 165,
       berat: profile?.weight || 60,
       keluhan: complaints || "",
-      tonguePhoto: tonguePhoto || profile?.tonguePhotoUrl || "",
-      hospitalDocs: hospitalDocs || [],
+      tonguePhoto: cleanTonguePhotoStr,
+      hospitalDocs: cleanHospitalDocs,
       answers: answers,
     };
     const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
-    const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}`;
+    const userIdVal = profile?.userId || user?.id;
+    const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}${userIdVal ? `&userId=${userIdVal}` : ""}`;
     const scoreText = `${totalScore}`;
     const maxScoreText = `${maxPossibleScore}`;
     const levelText = getResult().level;
@@ -6252,6 +6321,11 @@ function UsersTab() {
         const keluhan = parsed?.keluhan || parsed?.complaints || "";
         const tonguePhoto = parsed?.tonguePhoto || parsed?.tonguePhotoUrl || u.tonguePhotoUrl || "";
 
+        const cleanTonguePhoto =
+          tonguePhoto && (tonguePhoto.startsWith("data:") || tonguePhoto.length > 1000)
+            ? ""
+            : tonguePhoto;
+
         const resultPayload = {
           nama: u.fullName || "Pasien",
           usia: u.age || 25,
@@ -6259,11 +6333,11 @@ function UsersTab() {
           tinggi: u.height || 165,
           berat: u.weight || 60,
           keluhan: keluhan,
-          tonguePhoto: tonguePhoto,
+          tonguePhoto: cleanTonguePhoto,
           answers: answers,
         };
         const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
-        reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}`;
+        reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}${u.id ? `&userId=${u.id}` : ""}`;
       } catch (err) {
         console.error("Gagal memformat data skrining untuk link WhatsApp:", err);
       }

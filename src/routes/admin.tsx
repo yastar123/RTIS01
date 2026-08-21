@@ -1695,6 +1695,12 @@ function ScreeningSection({
       console.error("Gagal parse jawaban:", e);
     }
 
+    const cleanTonguePhoto =
+      item.tonguePhotoUrl &&
+      (item.tonguePhotoUrl.startsWith("data:") || item.tonguePhotoUrl.length > 1000)
+        ? ""
+        : item.tonguePhotoUrl || "";
+
     const resultPayload = {
       nama: item.fullName || item.userEmail?.split("@")[0] || "Pasien",
       usia: item.age || 25,
@@ -1702,11 +1708,11 @@ function ScreeningSection({
       tinggi: 165,
       berat: 60,
       keluhan: item.complaints || "",
-      tonguePhoto: item.tonguePhotoUrl || "",
+      tonguePhoto: cleanTonguePhoto,
       answers: parsedAnswers,
     };
     const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
-    const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}`;
+    const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}${item.userId ? `&userId=${item.userId}` : ""}`;
 
     const text = `Halo ${item.fullName || "Pasien"},\n\nBerikut adalah link laporan hasil skrining mandiri TCM Anda dari Rumah Terapy Ikhtiar Sehat:\n${reportUrl}\n\nTerima kasih!`;
 

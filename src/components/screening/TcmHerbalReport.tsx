@@ -1,4 +1,6 @@
 import { FC } from "react";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 import {
   Sparkles,
   AlertCircle,
@@ -183,7 +185,7 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
     : listCriticalImbalances();
 
   return (
-    <div className="space-y-8">
+    <div id="tcm-herbal-report-root" className="space-y-8">
       {/* AI STATUS & RE-ANALYSIS BANNER */}
       <div className="rounded-xl border border-primary/20 bg-gradient-to-r from-primary/10 via-amber-500/5 to-transparent p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -223,11 +225,44 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
           )}
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
               if (onDownloadPdf) {
                 onDownloadPdf();
               } else {
-                window.print();
+                const element = document.getElementById("tcm-herbal-report-root");
+                if (element) {
+                  try {
+                    const canvas = await html2canvas(element, {
+                      scale: 2,
+                      useCORS: true,
+                      logging: false,
+                    });
+                    const imgData = canvas.toDataURL("image/png");
+                    const pdf = new jsPDF("p", "mm", "a4");
+                    const pdfWidth = pdf.internal.pageSize.getWidth();
+                    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+                    let heightLeft = pdfHeight;
+                    let position = 0;
+
+                    pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
+                    heightLeft -= pdf.internal.pageSize.getHeight();
+
+                    while (heightLeft >= 0) {
+                      position = heightLeft - pdfHeight;
+                      pdf.addPage();
+                      pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
+                      heightLeft -= pdf.internal.pageSize.getHeight();
+                    }
+
+                    pdf.save("Laporan-Skrining-TCM.pdf");
+                  } catch (err) {
+                    console.error("PDF generation error:", err);
+                    window.print();
+                  }
+                } else {
+                  window.print();
+                }
               }
             }}
             className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-900 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-neutral-800 shadow-2xs transition-all"
