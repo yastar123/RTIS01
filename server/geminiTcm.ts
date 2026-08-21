@@ -37,6 +37,24 @@ export interface TitikAkupunkturItem {
   metodeStimulasi: string;
 }
 
+export interface TitikBekamItem {
+  namaTitik: string;
+  lokasiAnatomi: string;
+  indikasiTerapi: string;
+  jenisKop: string;
+  teknikBekam: string;
+  durasiDanFrequensi: string;
+}
+
+export interface TitikPijatItem {
+  namaTitik: string;
+  lokasiAnatomi: string;
+  indikasiTerapi: string;
+  teknikPijat: string;
+  durasiDanPenekanan: string;
+  manfaatUtama: string;
+}
+
 export interface TcmAiAnalysisResponse {
   kesimpulanHolistik: {
     statusVitalitas: string;
@@ -68,6 +86,8 @@ export interface TcmAiAnalysisResponse {
   }>;
   peringatanPrioritasTinggi: string[];
   titikAkupunktur?: TitikAkupunkturItem[];
+  titikBekam?: TitikBekamItem[];
+  titikPijat?: TitikPijatItem[];
   rekomendasiDietGayaHidup: {
     dietDianjurkan: string;
     dietDihindari: string;
@@ -303,6 +323,87 @@ export function generateFallbackTcmAnalysis(input: PatientScreeningInput): TcmAi
       },
     ],
     peringatanPrioritasTinggi: criticalWarnings,
+    titikBekam: [
+      {
+        namaTitik: "Daqu (BL-17 / 膈俞) & area Pinggang",
+        lokasiAnatomi:
+          "Punggung atas (BL-17 setinggi vertebra torakal ke-7, 1.5 cun di luar garis tengah) dan area pinggang bawah (lumbal II-IV).",
+        indikasiTerapi:
+          "Memperlancar sirkulasi darah (Huo Xue), membuang sumbatan Stasis, memperkuat fungsi Limpa-Ginjal, dan menghilangkan kelembapan internal.",
+        jenisKop: "Bekam Kering (Hijamah Jaffa) / Bekam Api",
+        teknikBekam:
+          "Tempelkan kop ukuran sedang pada titik yang telah diolesi minyak zaitun, biarkan selama 10-15 menit. Pastikan kulit bersih dan tidak ada lesi terbuka.",
+        durasiDanFrequensi: "10-15 menit per sesi, 1 kali per minggu selama 4 minggu, lalu evaluasi oleh terapis.",
+      },
+      {
+        namaTitik: "Zusanli (ST-36 / 足三里) & Sanyinjiao (SP-6)",
+        lokasiAnatomi:
+          "ST-36: 4 jari di bawah tempurung lutut, 1 jari di luar tulang kering. SP-6: 3 jari di atas mata kaki dalam, belakang tulang kering.",
+        indikasiTerapi:
+          "Menguatkan Qi Limpa dan Lambung (Jian Pi He Wei), membuang kelembapan, meningkatkan daya tahan tubuh (Wei Qi).",
+        jenisKop: "Bekam Luncur (Sliding Cupping) / Bekam Kering",
+        teknikBekam:
+          "Olesi tungkai bawah dengan minyak bekam hangat. Geser kop perlahan dari ST-36 ke arah bawah hingga mata kaki untuk menstimulasi meridian Lambung dan Limpa.",
+        durasiDanFrequensi: "15-20 menit luncuran per sesi, 1 kali per 10 hari.",
+      },
+      {
+        namaTitik: "Zhongwan (RN-12 / 中脘) & Qihai (RN-6)",
+        lokasiAnatomi:
+          "RN-12: Garis tengah perut, antara ujung tulang dada dan pusar. RN-6: 1.5 cun di bawah pusar.",
+        indikasiTerapi:
+          "Harmonisasi Lambung, memperkuat fungsi pencernaan, menghangatkan Yang Ginjal, dan membuang kelembapan perut.",
+        jenisKop: "Bekam Kering (Dry Cupping) ringan",
+        teknikBekam:
+          "Gunakan kop kecil, tempel lembut di RN-12 dan RN-6 selama 8-10 menit. Hindari hisapan terlalu kuat pada area perut.",
+        durasiDanFrequensi: "8-10 menit, 1 kali per minggu. Hindari saat perut penuh atau menstruasi.",
+      },
+    ],
+    titikPijat: [
+      {
+        namaTitik: "Zusanli (ST-36 / 足三里)",
+        lokasiAnatomi:
+          "4 jari di bawah tempurung lutut (patella), 1 jari ke arah luar dari tepi anterior tulang kering (tibia).",
+        indikasiTerapi:
+          "Menguatkan Qi Limpa dan Lambung, meningkatkan energi vital, memperbaiki penyerapan nutrisi, dan memperkuat daya tahan tubuh.",
+        teknikPijat:
+          "Gunakan ibu jari, tekan dengan kekuatan sedang menggunakan gerakan memutar searah jarum jam (tonifikasi). Lakukan pada kedua kaki secara bergantian.",
+        durasiDanPenekanan: "2-3 menit per titik, 2 kali sehari (pagi dan sore).",
+        manfaatUtama: "Titik tonik utama TCM untuk stamina dan pencernaan.",
+      },
+      {
+        namaTitik: "Sanyinjiao (SP-6 / 三阴交)",
+        lokasiAnatomi:
+          "3 jari di atas puncak mata kaki bagian dalam (malleolus medialis), tepat di belakang tepi tulang kering.",
+        indikasiTerapi:
+          "Menyelaraskan meridian Limpa, Hati, dan Ginjal, membuang kelembapan, melancarkan sirkulasi darah, dan menenangkan Shen.",
+        teknikPijat:
+          "Tekan dengan ibu jari menggunakan tekanan mantap namun lembut, gerakan memutar. Hindari pijatan keras.",
+        durasiDanPenekanan: "1-2 menit per titik. PERHATIAN: Kontraindikasi untuk ibu hamil.",
+        manfaatUtama: "Titik pertemuan 3 meridian Yin kaki yang sangat efektif untuk keluhan kelembapan dan hormonal.",
+      },
+      {
+        namaTitik: "Taichong (LR-3 / 太冲)",
+        lokasiAnatomi:
+          "Di punggung kaki, pada cekungan antara pangkal tulang metatarsal ibu jari kaki dan jari telunjuk kaki.",
+        indikasiTerapi:
+          "Mengurai stagnasi Qi Hati akibat stres, meredakan ketegangan otot leher dan pundak, menstabilkan emosi.",
+        teknikPijat:
+          "Tekan dengan ujung jempol atau pensil tumpul ke arah sela jari, gerakan mendorong perlahan selama 1-2 menit.",
+        durasiDanPenekanan: "1-2 menit per titik, lakukan saat merasa tegang atau stres.",
+        manfaatUtama: "Titik pereda stres dan penenang Qi Hati yang paling sering digunakan.",
+      },
+      {
+        namaTitik: "Neiguan (PC-6 / 内关)",
+        lokasiAnatomi:
+          "2 jari di atas lipatan pergelangan tangan bagian dalam, di antara dua tendon otot flexor.",
+        indikasiTerapi:
+          "Menenangkan dada dan pikiran (An Shen), meredakan mual, asam lambung naik, kecemasan, dan palpitasi jantung.",
+        teknikPijat:
+          "Tekan dengan ibu jari tegak lurus, tahan 5-10 detik, lepas, ulangi selama 1-2 menit.",
+        durasiDanPenekanan: "1-2 menit, dapat dilakukan kapan saja terutama saat mual atau cemas.",
+        manfaatUtama: "Titik ketenangan pikiran dan mual yang efektif untuk akupresur mandiri.",
+      },
+    ],
     titikAkupunktur: [
       {
         namaTitik: "Zusanli (ST-36 / 足三里)",
@@ -600,12 +701,14 @@ Tugas Anda adalah melakukan analisa mendalam terhadap hasil skrining mandiri kes
 1. Herbal Tradisional Indonesia (Jamu / Fitofarmaka / Simplisia)
 2. Herbal Tradisional China (TCM Single Herbs & Formula Klasik Zang-Fu)
 3. Rekomendasi Titik Akupunktur & Meridian Terapi Utama (4-6 titik meridian akurat beserta lokasi anatomis, indikasi terapi, dan metode stimulasi penusukan/pijat)
-4. Kesimpulan Analisa Holistik (Status Vitalitas, Root Cause, Qi & Blood, Psiko-Emosional, Wei Qi, Patogen, Prioritas Terapi)
-5. Profil Ketidakseimbangan Dasar (Qi, Blood, Yin, Yang, Qi Stagnation, Blood Stasis, Dampness, Phlegm, Heat, Cold dalam persentase 0-100)
-6. Profil Ketidakseimbangan Organ (Limpa, Ginjal, Hati, Jantung, Paru, Lambung, Kandung Empedu, Usus Besar, Usus Kecil, Kandung Kemih, San Jiao)
-7. Rekomendasi Pola Hidup & Diet (Makanan dianjurkan, dihindari, gaya hidup, 3-4 titik akupresur mandiri)
-8. Pola Ketidakseimbangan TCM (Sindrom kombinasi TCM beserta confidence match %)
-9. Peringatan Prioritas Tinggi! (Jika ada ketidakseimbangan kritis atau red flag klinis)
+4. Rekomendasi Titik Bekam (3-4 titik/area bekam beserta jenis kop, teknik, lokasi anatomis, indikasi TCM, durasi dan frekuensi) - KHUSUS TERAPIS
+5. Rekomendasi Titik Pijat Terapi (3-4 titik pijat meridian beserta lokasi, teknik pijat, durasi, dan manfaat utama) - KHUSUS TERAPIS
+6. Kesimpulan Analisa Holistik (Status Vitalitas, Root Cause, Qi & Blood, Psiko-Emosional, Wei Qi, Patogen, Prioritas Terapi)
+7. Profil Ketidakseimbangan Dasar (Qi, Blood, Yin, Yang, Qi Stagnation, Blood Stasis, Dampness, Phlegm, Heat, Cold dalam persentase 0-100)
+8. Profil Ketidakseimbangan Organ (Limpa, Ginjal, Hati, Jantung, Paru, Lambung, Kandung Empedu, Usus Besar, Usus Kecil, Kandung Kemih, San Jiao)
+9. Rekomendasi Pola Hidup & Diet (Makanan dianjurkan, dihindari, gaya hidup, 3-4 titik akupresur mandiri)
+10. Pola Ketidakseimbangan TCM (Sindrom kombinasi TCM beserta confidence match %)
+11. Peringatan Prioritas Tinggi! (Jika ada ketidakseimbangan kritis atau red flag klinis)
 
 DATA PASIEN & ANAMNESIS LANGKAH 2:
 - Nama: ${patientName}
@@ -670,6 +773,26 @@ BERIKAN OUTPUT DALAM FORMAT JSON PERSIS DENGAN STRUKTUR BERIKUT:
       "lokasiAnatomi": "4 jari di bawah tempurung lutut, 1 jari di luar tepi anterior tulang kering",
       "indikasiTerapi": "Menguatkan Limpa & Lambung, mereharmonisasi pencernaan, menyerap kelembapan",
       "metodeStimulasi": "Penusukan tegak lurus 1-1.5 cun / pemijatan hangat 2-3 menit"
+    }
+  ],
+  "titikBekam": [
+    {
+      "namaTitik": "string nama titik / area bekam",
+      "lokasiAnatomi": "string deskripsi lokasi anatomi yang tepat",
+      "indikasiTerapi": "string manfaat dan tujuan bekam pada titik ini dalam terminologi TCM",
+      "jenisKop": "string (Bekam Kering / Bekam Basah / Bekam Luncur / Bekam Api)",
+      "teknikBekam": "string langkah-langkah teknik penerapan bekam",
+      "durasiDanFrequensi": "string durasi per sesi dan frekuensi per minggu/bulan"
+    }
+  ],
+  "titikPijat": [
+    {
+      "namaTitik": "string nama titik pijat / area pijat",
+      "lokasiAnatomi": "string deskripsi lokasi yang tepat",
+      "indikasiTerapi": "string manfaat pijatan dalam terminologi TCM",
+      "teknikPijat": "string cara dan arah gerakan pijatan",
+      "durasiDanPenekanan": "string durasi dan tingkat tekanan yang dianjurkan",
+      "manfaatUtama": "string manfaat utama singkat"
     }
   ],
   "rekomendasiDietGayaHidup": {

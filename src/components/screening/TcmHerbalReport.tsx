@@ -54,6 +54,24 @@ export interface TitikAkupunkturItem {
   metodeStimulasi: string;
 }
 
+export interface TitikBekamItem {
+  namaTitik: string;
+  lokasiAnatomi: string;
+  indikasiTerapi: string;
+  jenisKop: string;
+  teknikBekam: string;
+  durasiDanFrequensi: string;
+}
+
+export interface TitikPijatItem {
+  namaTitik: string;
+  lokasiAnatomi: string;
+  indikasiTerapi: string;
+  teknikPijat: string;
+  durasiDanPenekanan: string;
+  manfaatUtama: string;
+}
+
 export interface TcmAiReport {
   kesimpulanHolistik: {
     statusVitalitas: string;
@@ -85,6 +103,8 @@ export interface TcmAiReport {
   }>;
   peringatanPrioritasTinggi: string[];
   titikAkupunktur?: TitikAkupunkturItem[];
+  titikBekam?: TitikBekamItem[];
+  titikPijat?: TitikPijatItem[];
   rekomendasiDietGayaHidup: {
     dietDianjurkan: string;
     dietDihindari: string;
@@ -917,6 +937,257 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
             <strong>Catatan:</strong> Penentuan titik akupunktur dan teknik penusukan jarum secara
             spesifik disesuaikan oleh Akupunturis / Sinshe tersertifikasi saat sesi konsultasi dan
             terapi langsung di klinik <strong>Rumah Terapy Ikhtiar Sehat</strong>.
+          </p>
+        </div>
+      )}
+
+      {/* 5.6. REKOMENDASI TITIK BEKAM (KHUSUS ADMIN/PRAKTISI) */}
+      {isAdmin && (
+        <div className="rounded-xl border border-violet-200 bg-violet-50/30 p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-700 text-white shadow-xs">
+                <Droplets className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-display text-base sm:text-lg font-bold text-violet-950">
+                  Rekomendasi Titik Bekam (Hijamah / Cupping Therapy)
+                </h3>
+                <p className="text-xs text-violet-800">
+                  Area dan titik bekam yang direkomendasikan berdasarkan sindrom TCM pasien.
+                </p>
+              </div>
+            </div>
+            <span className="self-start sm:self-center shrink-0 rounded-full bg-violet-100 px-3 py-1 text-[11px] font-bold text-violet-900 border border-violet-300 flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5 text-violet-700" />
+              Bekam AI Prescription (Khusus Admin)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {(report?.titikBekam && report.titikBekam.length > 0
+              ? report.titikBekam
+              : [
+                  {
+                    namaTitik: "Daqu (BL-17) & Area Punggung Atas",
+                    lokasiAnatomi:
+                      "Punggung atas setinggi vertebra torakal ke-7, 1.5 cun di luar garis tengah tulang belakang.",
+                    indikasiTerapi:
+                      "Memperlancar sirkulasi darah, membuang sumbatan Stasis Darah, dan mengurangi kelembapan internal.",
+                    jenisKop: "Bekam Kering (Dry Cupping) / Bekam Api",
+                    teknikBekam:
+                      "Olesi area dengan minyak zaitun, tempelkan kop ukuran sedang selama 10-15 menit.",
+                    durasiDanFrequensi: "10-15 menit, 1 kali/minggu selama 4 minggu.",
+                  },
+                  {
+                    namaTitik: "Zusanli (ST-36) & Sanyinjiao (SP-6)",
+                    lokasiAnatomi:
+                      "ST-36: 4 jari di bawah lutut. SP-6: 3 jari di atas mata kaki dalam.",
+                    indikasiTerapi:
+                      "Menguatkan Qi Limpa-Lambung, membuang kelembapan, meningkatkan Wei Qi.",
+                    jenisKop: "Bekam Luncur (Sliding Cupping)",
+                    teknikBekam:
+                      "Olesi tungkai bawah dengan minyak bekam hangat, geser kop perlahan sepanjang meridian Lambung.",
+                    durasiDanFrequensi: "15-20 menit, 1 kali per 10 hari.",
+                  },
+                  {
+                    namaTitik: "Zhongwan (RN-12) & Qihai (RN-6)",
+                    lokasiAnatomi:
+                      "RN-12: Garis tengah perut antara tulang dada dan pusar. RN-6: 1.5 cun di bawah pusar.",
+                    indikasiTerapi:
+                      "Harmonisasi Lambung, menghangatkan Yang Ginjal, memperkuat pencernaan.",
+                    jenisKop: "Bekam Kering Ringan",
+                    teknikBekam:
+                      "Gunakan kop kecil dengan hisapan ringan, tempel 8-10 menit. Hindari tekanan kuat.",
+                    durasiDanFrequensi: "8-10 menit, 1 kali/minggu. Hindari saat perut penuh atau menstruasi.",
+                  },
+                ]
+            ).map((bekam, idx) => (
+              <div
+                key={idx}
+                className="rounded-xl border border-violet-200/80 bg-white p-4 shadow-2xs space-y-3 flex flex-col justify-between hover:border-violet-400 transition-colors"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-violet-700 bg-violet-50 px-2 py-0.5 rounded border border-violet-200 inline-block mb-1">
+                        Titik Bekam #{idx + 1}
+                      </span>
+                      <h4 className="font-display text-base font-bold text-neutral-900 leading-tight">
+                        {bekam.namaTitik}
+                      </h4>
+                    </div>
+                    <span className="rounded-md bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-800 border border-violet-200 shrink-0">
+                      {bekam.jenisKop}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 text-xs text-neutral-700 pt-1">
+                    <div className="flex items-start gap-1.5">
+                      <MapPin className="h-3.5 w-3.5 shrink-0 text-amber-600 mt-0.5" />
+                      <div>
+                        <strong className="text-neutral-900">Lokasi Anatomi:</strong>{" "}
+                        <span>{bekam.lokasiAnatomi}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-1.5">
+                      <Target className="h-3.5 w-3.5 shrink-0 text-emerald-600 mt-0.5" />
+                      <div>
+                        <strong className="text-neutral-900">Indikasi TCM:</strong>{" "}
+                        <span>{bekam.indikasiTerapi}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-violet-100 pt-2 text-[11px] text-violet-950 bg-violet-50/40 p-2 rounded-lg space-y-1">
+                  <div className="flex items-center gap-1 text-violet-800 font-bold">
+                    <Flame className="h-3 w-3 text-violet-600" />
+                    <span>Teknik &amp; Durasi:</span>
+                  </div>
+                  <p className="text-neutral-700">{bekam.teknikBekam}</p>
+                  <p className="text-violet-800 font-semibold">{bekam.durasiDanFrequensi}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-[11px] text-violet-800/80 italic">
+            * Catatan Praktisi: Bekam / Hijamah hanya boleh dilakukan oleh Terapis Bekam
+            bersertifikat. Pastikan kondisi kulit pasien bersih, tidak ada lesi/infeksi, dan tidak
+            sedang hamil atau dalam keadaan sangat lemah.
+          </p>
+        </div>
+      )}
+
+      {/* 5.7. REKOMENDASI TITIK PIJAT TERAPI (KHUSUS ADMIN/PRAKTISI) */}
+      {isAdmin && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50/30 p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-700 text-white shadow-xs">
+                <Heart className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-display text-base sm:text-lg font-bold text-rose-950">
+                  Rekomendasi Titik Pijat Terapi
+                </h3>
+                <p className="text-xs text-rose-800">
+                  Titik pijat meridian yang direkomendasikan berdasarkan profil sindrom TCM pasien.
+                </p>
+              </div>
+            </div>
+            <span className="self-start sm:self-center shrink-0 rounded-full bg-rose-100 px-3 py-1 text-[11px] font-bold text-rose-900 border border-rose-300 flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5 text-rose-700" />
+              Massage AI Prescription (Khusus Admin)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {(report?.titikPijat && report.titikPijat.length > 0
+              ? report.titikPijat
+              : [
+                  {
+                    namaTitik: "Zusanli (ST-36 / 足三里)",
+                    lokasiAnatomi:
+                      "4 jari di bawah tempurung lutut, 1 jari ke arah luar dari tepi tulang kering.",
+                    indikasiTerapi:
+                      "Menguatkan Qi Limpa-Lambung, meningkatkan energi vital, memperbaiki penyerapan nutrisi.",
+                    teknikPijat:
+                      "Gunakan ibu jari, tekan memutar searah jarum jam (tonifikasi) dengan kekuatan sedang.",
+                    durasiDanPenekanan: "2-3 menit per titik, 2 kali sehari (pagi dan sore).",
+                    manfaatUtama: "Titik tonik utama TCM untuk stamina dan pencernaan.",
+                  },
+                  {
+                    namaTitik: "Sanyinjiao (SP-6 / 三阴交)",
+                    lokasiAnatomi:
+                      "3 jari di atas mata kaki dalam, tepat di belakang tepi tulang kering.",
+                    indikasiTerapi:
+                      "Menyelaraskan meridian Limpa, Hati, Ginjal, membuang kelembapan, melancarkan darah.",
+                    teknikPijat:
+                      "Tekan dengan ibu jari, gerakan memutar mantap namun lembut.",
+                    durasiDanPenekanan: "1-2 menit per titik. PERHATIAN: Kontraindikasi ibu hamil.",
+                    manfaatUtama: "Pertemuan 3 meridian Yin kaki, efektif untuk kelembapan & hormonal.",
+                  },
+                  {
+                    namaTitik: "Taichong (LR-3 / 太冲)",
+                    lokasiAnatomi:
+                      "Punggung kaki, cekungan antara pangkal ibu jari dan jari telunjuk kaki.",
+                    indikasiTerapi:
+                      "Mengurai stagnasi Qi Hati, meredakan ketegangan leher-pundak, menstabilkan emosi.",
+                    teknikPijat:
+                      "Tekan mendorong ke arah sela jari dengan ujung jempol, gerakan perlahan.",
+                    durasiDanPenekanan: "1-2 menit per titik, terutama saat stres atau tegang.",
+                    manfaatUtama: "Titik pereda stres dan penenang Qi Hati terbaik.",
+                  },
+                  {
+                    namaTitik: "Neiguan (PC-6 / 内关)",
+                    lokasiAnatomi:
+                      "2 jari di atas lipatan pergelangan tangan dalam, antara dua tendon flexor.",
+                    indikasiTerapi:
+                      "Menenangkan pikiran (An Shen), meredakan mual, asam lambung, kecemasan.",
+                    teknikPijat:
+                      "Tekan tegak lurus dengan ibu jari, tahan 5-10 detik, lepas, ulangi.",
+                    durasiDanPenekanan: "1-2 menit, kapan saja terutama saat mual atau cemas.",
+                    manfaatUtama: "Titik ketenangan pikiran dan anti-mual paling efektif.",
+                  },
+                ]
+            ).map((pijat, idx) => (
+              <div
+                key={idx}
+                className="rounded-xl border border-rose-200/80 bg-white p-4 shadow-2xs space-y-3 flex flex-col justify-between hover:border-rose-400 transition-colors"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 inline-block mb-1">
+                        Titik Pijat #{idx + 1}
+                      </span>
+                      <h4 className="font-display text-base font-bold text-neutral-900 leading-tight">
+                        {pijat.namaTitik}
+                      </h4>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] font-semibold text-rose-800 bg-rose-50/60 px-2 py-1 rounded border border-rose-100 flex items-center gap-1.5">
+                    <Heart className="h-3.5 w-3.5 shrink-0 text-rose-600" />
+                    <span>{pijat.manfaatUtama}</span>
+                  </div>
+
+                  <div className="space-y-1.5 text-xs text-neutral-700 pt-1">
+                    <div className="flex items-start gap-1.5">
+                      <MapPin className="h-3.5 w-3.5 shrink-0 text-amber-600 mt-0.5" />
+                      <div>
+                        <strong className="text-neutral-900">Lokasi Anatomi:</strong>{" "}
+                        <span>{pijat.lokasiAnatomi}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-1.5">
+                      <Target className="h-3.5 w-3.5 shrink-0 text-emerald-600 mt-0.5" />
+                      <div>
+                        <strong className="text-neutral-900">Indikasi TCM:</strong>{" "}
+                        <span>{pijat.indikasiTerapi}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-rose-100 pt-2 text-[11px] text-rose-950 bg-rose-50/40 p-2 rounded-lg space-y-1">
+                  <div className="flex items-center gap-1 text-rose-800 font-bold">
+                    <Compass className="h-3 w-3 text-rose-600" />
+                    <span>Teknik Pijat:</span>
+                  </div>
+                  <p className="text-neutral-700">{pijat.teknikPijat}</p>
+                  <p className="text-rose-800 font-semibold">{pijat.durasiDanPenekanan}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-[11px] text-rose-800/80 italic">
+            * Catatan Praktisi: Teknik pijat meridian di atas disesuaikan dengan kondisi dan toleransi
+            pasien. Pijatan sebaiknya dilakukan oleh Terapis Pijat / Refleksologi bersertifikat di
+            Rumah Terapy Ikhtiar Sehat.
           </p>
         </div>
       )}
