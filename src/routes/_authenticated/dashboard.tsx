@@ -2921,7 +2921,7 @@ function AdminScreeningDetailView({
           rel="noopener noreferrer"
           className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-xs hover:opacity-95 shrink-0"
         >
-          <Printer className="h-4 w-4" /> Cetak / Unduh Laporan Resmi PDF
+          <Printer className="h-4 w-4" /> Unduh Laporan Resmi PDF
         </a>
       </div>
 
@@ -3832,12 +3832,6 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
       if (savedData?.id) {
         void requestAiAnalysis(answers, savedData.id);
       }
-
-      // Automatically open the WhatsApp share link for the patient in a new tab
-      const waUrl = getWhatsAppUrlForPatient();
-      if (waUrl) {
-        window.open(waUrl, "_blank");
-      }
     } catch (err) {
       alert(err instanceof Error ? err.message : "Gagal menyimpan.");
     } finally {
@@ -4475,7 +4469,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                         rel="noopener noreferrer"
                         className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-xs hover:opacity-95 shrink-0"
                       >
-                        <Printer className="h-4 w-4" /> Cetak / Unduh Laporan Resmi PDF
+                        <Printer className="h-4 w-4" /> Unduh Laporan Resmi PDF
                       </a>
                     );
                   })()}
@@ -5651,7 +5645,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                   rel="noopener noreferrer"
                   className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 shrink-0"
                 >
-                  <Printer className="h-4 w-4" /> Cetak / Unduh Laporan Resmi PDF
+                  <Printer className="h-4 w-4" /> Unduh Laporan Resmi PDF
                 </a>
               </div>
 

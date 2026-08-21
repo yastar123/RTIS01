@@ -1081,7 +1081,7 @@ function Skrining() {
                   className="flex items-center gap-1.5 rounded-full bg-primary/10 px-4 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all"
                 >
                   <Printer className="h-3.5 w-3.5" />
-                  Cetak PDF
+                  Unduh PDF
                 </button>
               </>
             )}
@@ -2036,7 +2036,7 @@ function Skrining() {
                 className="flex items-center gap-2 rounded-full bg-neutral-800 px-6 py-3 text-xs font-semibold text-white hover:bg-neutral-900 transition-all"
               >
                 <Printer className="h-4 w-4" />
-                Unduh PDF / Cetak
+                Unduh PDF
               </button>
             </div>
           </div>

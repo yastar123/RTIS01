@@ -231,10 +231,10 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
               }
             }}
             className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-900 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-neutral-800 shadow-2xs transition-all"
-            title="Cetak atau simpan laporan lengkap dalam bentuk dokumen PDF"
+            title="Unduh laporan lengkap dalam bentuk dokumen PDF"
           >
             <Printer className="h-3.5 w-3.5" />
-            <span>Cetak / Unduh PDF</span>
+            <span>Unduh PDF</span>
           </button>
         </div>
       </div>
