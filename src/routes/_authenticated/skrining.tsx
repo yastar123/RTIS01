@@ -1,4 +1,6 @@
 import { useState, useEffect, FormEvent, useRef, useCallback } from "react";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 import { createFileRoute, Link } from "@/lib/route";
 import { useAuth, authHeaders, useProfile } from "@/hooks/use-auth";
 import { PageHeader } from "@/components/site/PageHeader";
@@ -1158,7 +1160,7 @@ function Skrining() {
     return list;
   };
 
-  const handleDownloadPdf = (e: React.MouseEvent) => {
+  const handleDownloadPdf = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     const element = document.getElementById("tcm-screening-report");
@@ -1166,60 +1168,107 @@ function Skrining() {
       toast.error("Format laporan tidak ditemukan di halaman ini.");
       return;
     }
-    toast.success(
-      "Membuka dialog cetak — pilih 'Save as PDF' / 'Simpan sebagai PDF' untuk mengunduh laporan.",
-      { duration: 6000 },
-    );
+    const toastId = toast.loading("Sedang menyiapkan dokumen PDF...");
+    const originalSrcs: { img: HTMLImageElement; src: string }[] = [];
+    const originalScrollY = window.scrollY;
+    const originalScrollX = window.scrollX;
 
-    // Print-isolation: hide all siblings so only the report prints
-    const allBodyChildren = Array.from(document.body.children) as HTMLElement[];
-    const hiddenElements: { el: HTMLElement; display: string }[] = [];
+    try {
+      // 1. Scroll to top to ensure complete capture
+      window.scrollTo(0, 0);
 
-    allBodyChildren.forEach((child) => {
-      if (!child.contains(element) && child !== element) {
-        hiddenElements.push({ el: child, display: child.style.display });
-        child.style.display = "none";
+      // 2. Convert images to inline base64 where possible to avoid CORS issues
+      const images = element.querySelectorAll("img");
+      await Promise.all(
+        Array.from(images).map(async (img) => {
+          try {
+            if (img.src.startsWith("data:")) return;
+            if (!img.src || !img.naturalWidth) return;
+
+            originalSrcs.push({ img, src: img.src });
+
+            const cvs = document.createElement("canvas");
+            cvs.width = img.naturalWidth;
+            cvs.height = img.naturalHeight;
+            const ctx = cvs.getContext("2d");
+            if (ctx) {
+              const proxyImg = new Image();
+              proxyImg.crossOrigin = "anonymous";
+              await new Promise<void>((resolve) => {
+                proxyImg.onload = () => {
+                  ctx.drawImage(proxyImg, 0, 0);
+                  try {
+                    img.src = cvs.toDataURL("image/png");
+                  } catch {
+                    // Ignore and use original source if tainted
+                  }
+                  resolve();
+                };
+                proxyImg.onerror = () => resolve();
+                proxyImg.src = img.src;
+              });
+            }
+          } catch {
+            // Ignore pre-conversion error
+          }
+        }),
+      );
+
+      // 3. Render element to canvas
+      const canvas = await html2canvas(element, {
+        scale: 1.5,
+        useCORS: true,
+        allowTaint: false, // Must be false to prevent SecurityError on toDataURL()
+        logging: false,
+        backgroundColor: "#ffffff",
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: document.documentElement.offsetWidth,
+        windowHeight: element.scrollHeight + 100,
+        ignoreElements: (el) => !!(el.classList && el.classList.contains("no-print")),
+      });
+
+      // 4. Restore scroll and image sources
+      window.scrollTo(originalScrollX, originalScrollY);
+      originalSrcs.forEach(({ img, src }) => {
+        img.src = src;
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      let heightLeft = pdfHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 10) {
+        position = heightLeft - pdfHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
+        heightLeft -= pageHeight;
       }
-    });
 
-    // Remove overflow/padding from ancestors so the full report renders
-    const ancestorStyles: {
-      el: HTMLElement;
-      overflow: string;
-      padding: string;
-      margin: string;
-    }[] = [];
-    let ancestor = element.parentElement;
-    while (ancestor && ancestor !== document.body) {
-      ancestorStyles.push({
-        el: ancestor,
-        overflow: ancestor.style.overflow,
-        padding: ancestor.style.padding,
-        margin: ancestor.style.margin,
-      });
-      ancestor.style.overflow = "visible";
-      ancestor.style.padding = "0";
-      ancestor.style.margin = "0";
-      ancestor = ancestor.parentElement;
+      pdf.save("Laporan-Skrining-TCM.pdf");
+      toast.success("Dokumen PDF berhasil diunduh!", { id: toastId });
+    } catch (err) {
+      console.error("PDF generation error:", err);
+      // Restore scroll and images on error
+      window.scrollTo(originalScrollX, originalScrollY);
+      try {
+        originalSrcs.forEach(({ img, src }) => {
+          img.src = src;
+        });
+      } catch { /* ignore */ }
+      toast.error(
+        "Gagal mengunduh PDF secara langsung. Silakan coba cetak halaman ini (Ctrl+P) sebagai alternatif.",
+        { id: toastId, duration: 5000 },
+      );
     }
-
-    const restore = () => {
-      hiddenElements.forEach(({ el, display }) => {
-        el.style.display = display;
-      });
-      ancestorStyles.forEach(({ el, overflow, padding, margin }) => {
-        el.style.overflow = overflow;
-        el.style.padding = padding;
-        el.style.margin = margin;
-      });
-    };
-
-    window.addEventListener("afterprint", restore, { once: true });
-    setTimeout(restore, 30000); // safety fallback
-
-    setTimeout(() => {
-      window.print();
-    }, 150);
   };
 
   return (
@@ -1691,7 +1740,6 @@ function Skrining() {
                   src="/logo.png"
                   alt="Logo Rumah Terapy"
                   className="h-20 w-auto rounded-xl border p-1"
-                  crossOrigin="anonymous"
                 />
                 <div>
                   <h1 className="font-display text-2xl font-black uppercase tracking-wider text-neutral-900 sm:text-3xl">
