@@ -17,6 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Download,
   Clock,
   ExternalLink,
   Eye,
