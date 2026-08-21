@@ -3023,12 +3023,17 @@ function AdminScreeningDetailView({
                         <FileText className="h-4 w-4" />
                         <span>PDF</span>
                       </div>
-                    ) : (
+                    ) : doc.url ? (
                       <img
                         src={doc.url}
                         alt={doc.name}
                         className="h-10 w-10 shrink-0 rounded object-cover border"
                       />
+                    ) : (
+                      <div className="h-10 w-10 shrink-0 rounded bg-primary/10 text-primary flex flex-col items-center justify-center font-bold text-[10px] border">
+                        <FileText className="h-4 w-4" />
+                        <span>DOC</span>
+                      </div>
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-foreground truncate">{doc.name}</p>
@@ -4645,12 +4650,17 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                                         <FileText className="h-3.5 w-3.5" />
                                         <span>PDF</span>
                                       </div>
-                                    ) : (
+                                    ) : doc.url ? (
                                       <img
                                         src={doc.url}
                                         alt={doc.name}
                                         className="h-9 w-9 shrink-0 rounded object-cover border"
                                       />
+                                    ) : (
+                                      <div className="h-9 w-9 shrink-0 rounded bg-primary/10 text-primary flex flex-col items-center justify-center font-bold text-[9px] border">
+                                        <FileText className="h-3.5 w-3.5" />
+                                        <span>DOC</span>
+                                      </div>
                                     )}
                                     <div className="flex-1 min-w-0">
                                       <p className="font-medium text-foreground truncate">
@@ -5258,7 +5268,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                                       <FileText className="h-5 w-5" />
                                       <span>PDF</span>
                                     </div>
-                                  ) : (
+                                  ) : doc.url ? (
                                     <div
                                       onClick={() => setPreviewHospitalDoc(doc)}
                                       className="h-11 w-11 shrink-0 rounded-lg overflow-hidden border bg-background cursor-pointer hover:opacity-80 transition-opacity"
@@ -5269,6 +5279,11 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                                         alt={doc.name}
                                         className="h-full w-full object-cover"
                                       />
+                                    </div>
+                                  ) : (
+                                    <div className="h-11 w-11 shrink-0 rounded-lg bg-primary/10 text-primary flex flex-col items-center justify-center font-bold text-[10px] border">
+                                      <FileText className="h-5 w-5" />
+                                      <span>DOC</span>
                                     </div>
                                   )}
 
@@ -5521,12 +5536,17 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                                       <FileText className="h-3.5 w-3.5" />
                                       <span>PDF</span>
                                     </div>
-                                  ) : (
+                                  ) : doc.url ? (
                                     <img
                                       src={doc.url}
                                       alt={doc.name}
                                       className="h-8 w-8 shrink-0 rounded object-cover border"
                                     />
+                                  ) : (
+                                    <div className="h-8 w-8 shrink-0 rounded bg-primary/10 text-primary flex flex-col items-center justify-center font-bold text-[8px] border">
+                                      <FileText className="h-3 w-3" />
+                                      <span>DOC</span>
+                                    </div>
                                   )}
                                   <div className="flex-1 min-w-0">
                                     <p className="font-medium text-foreground truncate text-[11px]">
@@ -5660,12 +5680,16 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                             <ExternalLink className="h-4 w-4" /> Buka PDF di Tab Baru
                           </Button>
                         </div>
-                      ) : (
+                      ) : previewHospitalDoc?.url ? (
                         <img
-                          src={previewHospitalDoc?.url}
-                          alt={previewHospitalDoc?.name}
+                          src={previewHospitalDoc.url}
+                          alt={previewHospitalDoc.name}
                           className="max-h-[65vh] w-auto object-contain rounded-lg shadow-xs"
                         />
+                      ) : (
+                        <div className="text-xs text-muted-foreground p-8 text-center bg-muted/20 rounded-lg">
+                          Dokumen tidak memiliki pratinjau gambar
+                        </div>
                       )}
                     </div>
 

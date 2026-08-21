@@ -33,6 +33,7 @@ import {
   Video,
 } from "lucide-react";
 import { TcmHerbalReport, TcmAiReport } from "@/components/screening/TcmHerbalReport";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/skrining")({
   head: () => ({
@@ -2094,6 +2095,7 @@ function Skrining() {
                 onClick={async () => {
                   const element = document.getElementById("tcm-screening-report");
                   if (element) {
+                    const toastId = toast.loading("Sedang menyiapkan dokumen PDF...");
                     try {
                       const canvas = await html2canvas(element, {
                         scale: 2,
@@ -2119,8 +2121,12 @@ function Skrining() {
                       }
 
                       pdf.save("Laporan-Skrining-TCM.pdf");
+                      toast.success("Dokumen PDF berhasil diunduh!", { id: toastId });
                     } catch (err) {
                       console.error("PDF generation error:", err);
+                      toast.error("Gagal membuat PDF otomatis. Membuka dialog cetak sistem...", {
+                        id: toastId,
+                      });
                       window.print();
                     }
                   } else {

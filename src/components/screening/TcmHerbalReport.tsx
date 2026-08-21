@@ -1,6 +1,7 @@
 import { FC } from "react";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
+import { toast } from "sonner";
 import {
   Sparkles,
   AlertCircle,
@@ -231,6 +232,7 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
               } else {
                 const element = document.getElementById("tcm-herbal-report-root");
                 if (element) {
+                  const toastId = toast.loading("Sedang menyiapkan dokumen PDF...");
                   try {
                     const canvas = await html2canvas(element, {
                       scale: 2,
@@ -256,8 +258,12 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
                     }
 
                     pdf.save("Laporan-Skrining-TCM.pdf");
+                    toast.success("Dokumen PDF berhasil diunduh!", { id: toastId });
                   } catch (err) {
                     console.error("PDF generation error:", err);
+                    toast.error("Gagal membuat PDF otomatis. Membuka dialog cetak sistem...", {
+                      id: toastId,
+                    });
                     window.print();
                   }
                 } else {
