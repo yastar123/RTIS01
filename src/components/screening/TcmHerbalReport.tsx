@@ -276,7 +276,6 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
                     const canvas = await html2canvas(element, {
                       scale: 1.5,
                       useCORS: true,
-                      allowTaint: true,
                       logging: false,
                       backgroundColor: "#ffffff",
                       scrollX: 0,

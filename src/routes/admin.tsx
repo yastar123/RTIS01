@@ -1731,7 +1731,7 @@ function ScreeningSection({
       tonguePhoto: cleanTonguePhoto,
       answers: sanitizePayloadAnswers(parsedAnswers),
     };
-    const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
+    const encodedPayload = encodeURIComponent(btoa(encodeURIComponent(JSON.stringify(resultPayload))));
     const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}${item.userId ? `&userId=${item.userId}` : ""}`;
 
     const text = `Halo ${item.fullName || "Pasien"},\n\nBerikut adalah link laporan hasil skrining mandiri TCM Anda dari Rumah Terapy Ikhtiar Sehat:\n${reportUrl}\n\nTerima kasih!`;

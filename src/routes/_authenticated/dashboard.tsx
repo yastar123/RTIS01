@@ -2861,7 +2861,7 @@ function AdminScreeningDetailView({
           : item.tonguePhotoUrl || "",
       answers: sanitizePayloadAnswers(parsedAnswers),
     };
-    const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
+    const encodedPayload = encodeURIComponent(btoa(encodeURIComponent(JSON.stringify(resultPayload))));
     const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}${item.userId ? `&userId=${item.userId}` : ""}`;
 
     template = template.replace(
@@ -2895,7 +2895,7 @@ function AdminScreeningDetailView({
           : item.tonguePhotoUrl || "",
       answers: sanitizePayloadAnswers(parsedAnswers),
     };
-    const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
+    const encodedPayload = encodeURIComponent(btoa(encodeURIComponent(JSON.stringify(resultPayload))));
     return `/skrining?resultData=${encodedPayload}${item.userId ? `&userId=${item.userId}` : ""}`;
   };
 
@@ -3267,7 +3267,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
           : item.tonguePhotoUrl || "",
       answers: sanitizePayloadAnswers(parsedAns),
     };
-    const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
+    const encodedPayload = encodeURIComponent(btoa(encodeURIComponent(JSON.stringify(resultPayload))));
     const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}${item.userId ? `&userId=${item.userId}` : ""}`;
 
     template = template.replace(
@@ -3622,7 +3622,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
       hospitalDocs: cleanHospitalDocs,
       answers: sanitizePayloadAnswers(answersToUse),
     };
-    const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
+    const encodedPayload = encodeURIComponent(btoa(encodeURIComponent(JSON.stringify(resultPayload))));
     const userIdVal = profile?.userId || user?.id;
     return `/skrining?resultData=${encodedPayload}${userIdVal ? `&userId=${userIdVal}` : ""}`;
   };
@@ -3822,7 +3822,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
       hospitalDocs: cleanHospitalDocs,
       answers: sanitizePayloadAnswers(answers),
     };
-    const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
+    const encodedPayload = encodeURIComponent(btoa(encodeURIComponent(JSON.stringify(resultPayload))));
     const userIdVal = profile?.userId || user?.id;
     const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}${userIdVal ? `&userId=${userIdVal}` : ""}`;
     const name = profile?.fullName || user?.email.split("@")[0] || "Pasien";
@@ -3874,7 +3874,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
       hospitalDocs: cleanHospitalDocs,
       answers: sanitizePayloadAnswers(answers),
     };
-    const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
+    const encodedPayload = encodeURIComponent(btoa(encodeURIComponent(JSON.stringify(resultPayload))));
     const userIdVal = profile?.userId || user?.id;
     const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}${userIdVal ? `&userId=${userIdVal}` : ""}`;
     const scoreText = `${totalScore}`;
@@ -6377,7 +6377,7 @@ function UsersTab() {
           tonguePhoto: cleanTonguePhoto,
           answers: sanitizePayloadAnswers(answers),
         };
-        const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
+        const encodedPayload = encodeURIComponent(btoa(encodeURIComponent(JSON.stringify(resultPayload))));
         reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}${u.id ? `&userId=${u.id}` : ""}`;
       } catch (err) {
         console.error("Gagal memformat data skrining untuk link WhatsApp:", err);
