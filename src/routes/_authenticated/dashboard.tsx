@@ -3214,6 +3214,48 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
     }
   };
 
+  // Print-isolation helper: hides everything except the target element then triggers print
+  const printReportIsolated = (elementId: string) => {
+    const element = document.getElementById(elementId);
+    if (!element) {
+      alert("Format laporan tidak ditemukan. Pastikan laporan AI sudah dimuat.");
+      return;
+    }
+    const allBodyChildren = Array.from(document.body.children) as HTMLElement[];
+    const hiddenElements: { el: HTMLElement; display: string }[] = [];
+    allBodyChildren.forEach((child) => {
+      if (!child.contains(element) && child !== element) {
+        hiddenElements.push({ el: child, display: child.style.display });
+        child.style.display = "none";
+      }
+    });
+    const ancestorStyles: { el: HTMLElement; overflow: string; padding: string; margin: string }[] = [];
+    let ancestor = element.parentElement;
+    while (ancestor && ancestor !== document.body) {
+      ancestorStyles.push({
+        el: ancestor,
+        overflow: ancestor.style.overflow,
+        padding: ancestor.style.padding,
+        margin: ancestor.style.margin,
+      });
+      ancestor.style.overflow = "visible";
+      ancestor.style.padding = "0";
+      ancestor.style.margin = "0";
+      ancestor = ancestor.parentElement;
+    }
+    const restore = () => {
+      hiddenElements.forEach(({ el, display }) => { el.style.display = display; });
+      ancestorStyles.forEach(({ el, overflow, padding, margin }) => {
+        el.style.overflow = overflow;
+        el.style.padding = padding;
+        el.style.margin = margin;
+      });
+    };
+    window.addEventListener("afterprint", restore, { once: true });
+    setTimeout(restore, 30000);
+    setTimeout(() => { window.print(); }, 150);
+  };
+
   useEffect(() => {
     if (isAdmin) {
       void fetchAdminScreenings();
@@ -4554,14 +4596,15 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                       console.error(e);
                     }
                     return (
-                      <a
-                        href={getFullReportPageUrl(parsedAnswers)}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
+                        onClick={() =>
+                          printReportIsolated("tcm-herbal-report-root")
+                        }
                         className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-xs hover:opacity-95 shrink-0"
                       >
                         <Printer className="h-4 w-4" /> Unduh Laporan Resmi PDF
-                      </a>
+                      </button>
                     );
                   })()}
                 </div>
@@ -5749,14 +5792,13 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                     </p>
                   </div>
                 </div>
-                <a
-                  href={getFullReportPageUrl(answers)}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  type="button"
+                  onClick={() => printReportIsolated("tcm-herbal-report-root")}
                   className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 shrink-0"
                 >
                   <Printer className="h-4 w-4" /> Unduh Laporan Resmi PDF
-                </a>
+                </button>
               </div>
 
               <div className="space-y-3">

@@ -237,6 +237,8 @@
     margin: 0 !important;
     padding: 0 !important;
     width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 
   /* Hide interactive-only elements */
@@ -289,5 +291,23 @@
 
   .print-header-bg {
     background-color: #f9fafb !important;
+  }
+
+  /* Force all containers to be visible and full height during print */
+  [data-print-target],
+  [id="tcm-herbal-report-root"],
+  [id="tcm-screening-report"] {
+    display: block !important;
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    position: static !important;
+    width: 100% !important;
+  }
+
+  /* Make sure overflow-hidden parents don't clip the report */
+  [id="tcm-herbal-report-root"] *,
+  [id="tcm-screening-report"] * {
+    overflow: visible !important;
   }
 }

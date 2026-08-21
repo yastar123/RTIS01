@@ -1,6 +1,4 @@
 import { FC } from "react";
-import html2canvas from "html2canvas";
-import { jsPDF } from "jspdf";
 import { toast } from "sonner";
 import {
   Sparkles,
@@ -226,112 +224,71 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
           )}
           <button
             type="button"
-            onClick={async () => {
+            onClick={() => {
               if (onDownloadPdf) {
                 onDownloadPdf();
-              } else {
-                // Prefer capturing the full screening report container if it exists
-                const element =
-                  document.getElementById("tcm-screening-report") ||
-                  document.getElementById("tcm-herbal-report-root");
-                if (element) {
-                  const toastId = toast.loading("Sedang menyiapkan dokumen PDF...");
-                  try {
-                    // Pre-convert all images to inline base64 to avoid CORS tainted canvas errors
-                    const images = element.querySelectorAll("img");
-                    const originalSrcs: { img: HTMLImageElement; src: string }[] = [];
-                    await Promise.all(
-                      Array.from(images).map(async (img) => {
-                        try {
-                          if (img.src.startsWith("data:")) return;
-                          if (!img.src || !img.naturalWidth) return;
-                          originalSrcs.push({ img, src: img.src });
-                          const cvs = document.createElement("canvas");
-                          cvs.width = img.naturalWidth;
-                          cvs.height = img.naturalHeight;
-                          const ctx = cvs.getContext("2d");
-                          if (ctx) {
-                            const proxyImg = new Image();
-                            proxyImg.crossOrigin = "anonymous";
-                            await new Promise<void>((resolve) => {
-                              proxyImg.onload = () => {
-                                ctx.drawImage(proxyImg, 0, 0);
-                                try {
-                                  img.src = cvs.toDataURL("image/png");
-                                } catch {
-                                  // If tainted, leave original
-                                }
-                                resolve();
-                              };
-                              proxyImg.onerror = () => resolve();
-                              proxyImg.src = img.src;
-                            });
-                          }
-                        } catch {
-                          // Skip images that can't be converted
-                        }
-                      }),
-                    );
-
-                    const canvas = await html2canvas(element, {
-                      scale: 1.5,
-                      useCORS: true,
-                      logging: false,
-                      backgroundColor: "#ffffff",
-                      scrollX: 0,
-                      scrollY: -window.scrollY,
-                      windowWidth: document.documentElement.offsetWidth,
-                      windowHeight: element.scrollHeight + 100,
-                      ignoreElements: (el) =>
-                        !!(el.classList && el.classList.contains("no-print")),
-                    });
-
-                    // Restore original image sources
-                    originalSrcs.forEach(({ img, src }) => {
-                      img.src = src;
-                    });
-
-                    const imgData = canvas.toDataURL("image/png");
-                    const pdf = new jsPDF("p", "mm", "a4");
-                    const pdfWidth = pdf.internal.pageSize.getWidth();
-                    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-                    const pageHeight = pdf.internal.pageSize.getHeight();
-
-                    let heightLeft = pdfHeight;
-                    let position = 0;
-
-                    pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
-                    heightLeft -= pageHeight;
-
-                    while (heightLeft > 10) {
-                      position = heightLeft - pdfHeight;
-                      pdf.addPage();
-                      pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
-                      heightLeft -= pageHeight;
-                    }
-
-                    pdf.save("Laporan-Skrining-TCM.pdf");
-                    toast.success("Dokumen PDF berhasil diunduh!", { id: toastId });
-                  } catch (err) {
-                    console.error("PDF generation error:", err);
-                    // Restore original image sources on error
-                    try {
-                      originalSrcs.forEach(({ img, src }) => {
-                        img.src = src;
-                      });
-                    } catch { /* ignore cleanup errors */ }
-                    toast.error(
-                      "Gagal mengunduh PDF otomatis. Membuka dialog cetak browser sebagai alternatif...",
-                      { id: toastId, duration: 4000 },
-                    );
-                    setTimeout(() => {
-                      window.print();
-                    }, 500);
-                  }
-                } else {
-                  toast.error("Format laporan tidak ditemukan di halaman ini.");
-                }
+                return;
               }
+              const element =
+                document.getElementById("tcm-screening-report") ||
+                document.getElementById("tcm-herbal-report-root");
+              if (!element) {
+                toast.error("Format laporan tidak ditemukan di halaman ini.");
+                return;
+              }
+              toast.success(
+                "Membuka dialog cetak — pilih 'Save as PDF' / 'Simpan sebagai PDF' untuk mengunduh laporan.",
+                { duration: 6000 },
+              );
+
+              // Print-isolation: hide all siblings so only the report prints
+              const allBodyChildren = Array.from(document.body.children) as HTMLElement[];
+              const hiddenElements: { el: HTMLElement; display: string }[] = [];
+
+              allBodyChildren.forEach((child) => {
+                if (!child.contains(element) && child !== element) {
+                  hiddenElements.push({ el: child, display: child.style.display });
+                  child.style.display = "none";
+                }
+              });
+
+              const ancestorStyles: {
+                el: HTMLElement;
+                overflow: string;
+                padding: string;
+                margin: string;
+              }[] = [];
+              let ancestor = element.parentElement;
+              while (ancestor && ancestor !== document.body) {
+                ancestorStyles.push({
+                  el: ancestor,
+                  overflow: ancestor.style.overflow,
+                  padding: ancestor.style.padding,
+                  margin: ancestor.style.margin,
+                });
+                ancestor.style.overflow = "visible";
+                ancestor.style.padding = "0";
+                ancestor.style.margin = "0";
+                ancestor = ancestor.parentElement;
+              }
+
+              const restore = () => {
+                hiddenElements.forEach(({ el, display }) => {
+                  el.style.display = display;
+                });
+                ancestorStyles.forEach(({ el, overflow, padding, margin }) => {
+                  el.style.overflow = overflow;
+                  el.style.padding = padding;
+                  el.style.margin = margin;
+                });
+              };
+
+              window.addEventListener("afterprint", restore, { once: true });
+              setTimeout(restore, 30000);
+
+              setTimeout(() => {
+                window.print();
+              }, 150);
             }}
             className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-900 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-neutral-800 shadow-2xs transition-all"
             title="Unduh laporan lengkap dalam bentuk dokumen PDF"
