@@ -1,5 +1,8 @@
 import { createFileRoute, Link } from "@/lib/route";
 import { useEffect, useState, type FormEvent } from "react";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
+import { toast } from "sonner";
 import {
   CalendarDays,
   ChevronLeft,
@@ -58,6 +61,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+
+const sanitizePayloadAnswers = (rawAnswers: unknown): Record<string, number> => {
+  if (!rawAnswers || typeof rawAnswers !== "object") return {};
+  const obj = rawAnswers as Record<string, unknown>;
+  const src =
+    obj.answers && typeof obj.answers === "object" ? (obj.answers as Record<string, unknown>) : obj;
+
+  const clean: Record<string, number> = {};
+  for (const [key, val] of Object.entries(src)) {
+    if (typeof val === "number") {
+      clean[key] = val;
+    } else if (typeof val === "string" && !isNaN(Number(val))) {
+      clean[key] = Number(val);
+    }
+  }
+  return clean;
+};
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -1709,7 +1729,7 @@ function ScreeningSection({
       berat: 60,
       keluhan: item.complaints || "",
       tonguePhoto: cleanTonguePhoto,
-      answers: parsedAnswers,
+      answers: sanitizePayloadAnswers(parsedAnswers),
     };
     const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
     const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}${item.userId ? `&userId=${item.userId}` : ""}`;
@@ -2227,7 +2247,47 @@ function ScreeningDetailModal({
         <DialogFooter className="pt-4 border-t mt-4 flex flex-col sm:flex-row justify-between items-center gap-2">
           <Button
             type="button"
-            onClick={() => window.print()}
+            onClick={async () => {
+              const element = document.getElementById("tcm-herbal-report-root");
+              if (!element) {
+                toast.error("Format laporan tidak ditemukan di halaman ini.");
+                return;
+              }
+              const toastId = toast.loading("Sedang menyiapkan dokumen PDF...");
+              try {
+                const canvas = await html2canvas(element, {
+                  scale: 2,
+                  useCORS: true,
+                  logging: false,
+                });
+                const imgData = canvas.toDataURL("image/png");
+                const pdf = new jsPDF("p", "mm", "a4");
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+                let heightLeft = pdfHeight;
+                let position = 0;
+
+                pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
+                heightLeft -= pdf.internal.pageSize.getHeight();
+
+                while (heightLeft >= 0) {
+                  position = heightLeft - pdfHeight;
+                  pdf.addPage();
+                  pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
+                  heightLeft -= pdf.internal.pageSize.getHeight();
+                }
+
+                pdf.save("Laporan-Skrining-TCM.pdf");
+                toast.success("Dokumen PDF berhasil diunduh!", { id: toastId });
+              } catch (err) {
+                console.error("PDF generation error:", err);
+                toast.error(
+                  "Gagal mengunduh PDF otomatis. Silakan coba kembali beberapa saat lagi.",
+                  { id: toastId },
+                );
+              }
+            }}
             className="w-full sm:w-auto bg-neutral-900 text-white text-xs gap-1.5 hover:bg-neutral-800"
           >
             <Printer className="h-3.5 w-3.5" />

@@ -89,6 +89,23 @@ import {
   type ServiceOption,
 } from "@/lib/reservations";
 
+const sanitizePayloadAnswers = (rawAnswers: unknown): Record<string, number> => {
+  if (!rawAnswers || typeof rawAnswers !== "object") return {};
+  const obj = rawAnswers as Record<string, unknown>;
+  const src =
+    obj.answers && typeof obj.answers === "object" ? (obj.answers as Record<string, unknown>) : obj;
+
+  const clean: Record<string, number> = {};
+  for (const [key, val] of Object.entries(src)) {
+    if (typeof val === "number") {
+      clean[key] = val;
+    } else if (typeof val === "string" && !isNaN(Number(val))) {
+      clean[key] = Number(val);
+    }
+  }
+  return clean;
+};
+
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
@@ -2842,7 +2859,7 @@ function AdminScreeningDetailView({
         (item.tonguePhotoUrl.startsWith("data:") || item.tonguePhotoUrl.length > 1000)
           ? ""
           : item.tonguePhotoUrl || "",
-      answers: parsedAnswers,
+      answers: sanitizePayloadAnswers(parsedAnswers),
     };
     const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
     const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}${item.userId ? `&userId=${item.userId}` : ""}`;
@@ -2876,7 +2893,7 @@ function AdminScreeningDetailView({
         (item.tonguePhotoUrl.startsWith("data:") || item.tonguePhotoUrl.length > 1000)
           ? ""
           : item.tonguePhotoUrl || "",
-      answers: parsedAnswers,
+      answers: sanitizePayloadAnswers(parsedAnswers),
     };
     const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
     return `/skrining?resultData=${encodedPayload}${item.userId ? `&userId=${item.userId}` : ""}`;
@@ -3248,7 +3265,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
         (item.tonguePhotoUrl.startsWith("data:") || item.tonguePhotoUrl.length > 1000)
           ? ""
           : item.tonguePhotoUrl || "",
-      answers: parsedAns,
+      answers: sanitizePayloadAnswers(parsedAns),
     };
     const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
     const reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}${item.userId ? `&userId=${item.userId}` : ""}`;
@@ -3603,7 +3620,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
       keluhan: complaints || "",
       tonguePhoto: cleanTonguePhotoStr,
       hospitalDocs: cleanHospitalDocs,
-      answers: answersToUse,
+      answers: sanitizePayloadAnswers(answersToUse),
     };
     const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
     const userIdVal = profile?.userId || user?.id;
@@ -3803,7 +3820,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
       keluhan: complaints || "",
       tonguePhoto: cleanTonguePhotoStr,
       hospitalDocs: cleanHospitalDocs,
-      answers: answers,
+      answers: sanitizePayloadAnswers(answers),
     };
     const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
     const userIdVal = profile?.userId || user?.id;
@@ -3855,7 +3872,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
       keluhan: complaints || "",
       tonguePhoto: cleanTonguePhotoStr,
       hospitalDocs: cleanHospitalDocs,
-      answers: answers,
+      answers: sanitizePayloadAnswers(answers),
     };
     const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
     const userIdVal = profile?.userId || user?.id;
@@ -6358,7 +6375,7 @@ function UsersTab() {
           berat: u.weight || 60,
           keluhan: keluhan,
           tonguePhoto: cleanTonguePhoto,
-          answers: answers,
+          answers: sanitizePayloadAnswers(answers),
         };
         const encodedPayload = btoa(encodeURIComponent(JSON.stringify(resultPayload)));
         reportUrl = `${window.location.origin}/skrining?resultData=${encodedPayload}${u.id ? `&userId=${u.id}` : ""}`;

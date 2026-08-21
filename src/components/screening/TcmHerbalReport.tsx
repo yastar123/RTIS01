@@ -261,13 +261,13 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
                     toast.success("Dokumen PDF berhasil diunduh!", { id: toastId });
                   } catch (err) {
                     console.error("PDF generation error:", err);
-                    toast.error("Gagal membuat PDF otomatis. Membuka dialog cetak sistem...", {
-                      id: toastId,
-                    });
-                    window.print();
+                    toast.error(
+                      "Gagal mengunduh PDF otomatis. Silakan coba kembali beberapa saat lagi.",
+                      { id: toastId },
+                    );
                   }
                 } else {
-                  window.print();
+                  toast.error("Format laporan tidak ditemukan di halaman ini.");
                 }
               }
             }}

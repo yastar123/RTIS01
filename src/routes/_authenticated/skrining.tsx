@@ -350,7 +350,8 @@ function Skrining() {
     if (resultDataParam) {
       setIsViewingShared(true);
       try {
-        const decoded = JSON.parse(decodeURIComponent(atob(resultDataParam)));
+        const cleanedParam = resultDataParam.replace(/ /g, "+");
+        const decoded = JSON.parse(decodeURIComponent(atob(cleanedParam)));
         if (decoded) {
           setNama(decoded.nama || "");
           setUsia(decoded.usia ? String(decoded.usia) : "25");
@@ -1040,8 +1041,45 @@ function Skrining() {
     return list;
   };
 
-  const triggerPrint = () => {
-    window.print();
+  const handleDownloadPdf = async () => {
+    const element = document.getElementById("tcm-screening-report");
+    if (!element) {
+      toast.error("Format laporan tidak ditemukan di halaman ini.");
+      return;
+    }
+    const toastId = toast.loading("Sedang menyiapkan dokumen PDF...");
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      let heightLeft = pdfHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
+      heightLeft -= pdf.internal.pageSize.getHeight();
+
+      while (heightLeft >= 0) {
+        position = heightLeft - pdfHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
+        heightLeft -= pdf.internal.pageSize.getHeight();
+      }
+
+      pdf.save("Laporan-Skrining-TCM.pdf");
+      toast.success("Dokumen PDF berhasil diunduh!", { id: toastId });
+    } catch (err) {
+      console.error("PDF generation error:", err);
+      toast.error("Gagal mengunduh PDF otomatis. Silakan coba kembali beberapa saat lagi.", {
+        id: toastId,
+      });
+    }
   };
 
   return (
@@ -1135,7 +1173,7 @@ function Skrining() {
                   Isi Ulang
                 </button>
                 <button
-                  onClick={triggerPrint}
+                  onClick={handleDownloadPdf}
                   className="flex items-center gap-1.5 rounded-full bg-primary/10 px-4 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-all"
                 >
                   <Printer className="h-3.5 w-3.5" />
@@ -2092,47 +2130,7 @@ function Skrining() {
               </Link>
               <button
                 type="button"
-                onClick={async () => {
-                  const element = document.getElementById("tcm-screening-report");
-                  if (element) {
-                    const toastId = toast.loading("Sedang menyiapkan dokumen PDF...");
-                    try {
-                      const canvas = await html2canvas(element, {
-                        scale: 2,
-                        useCORS: true,
-                        logging: false,
-                      });
-                      const imgData = canvas.toDataURL("image/png");
-                      const pdf = new jsPDF("p", "mm", "a4");
-                      const pdfWidth = pdf.internal.pageSize.getWidth();
-                      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-
-                      let heightLeft = pdfHeight;
-                      let position = 0;
-
-                      pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
-                      heightLeft -= pdf.internal.pageSize.getHeight();
-
-                      while (heightLeft >= 0) {
-                        position = heightLeft - pdfHeight;
-                        pdf.addPage();
-                        pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
-                        heightLeft -= pdf.internal.pageSize.getHeight();
-                      }
-
-                      pdf.save("Laporan-Skrining-TCM.pdf");
-                      toast.success("Dokumen PDF berhasil diunduh!", { id: toastId });
-                    } catch (err) {
-                      console.error("PDF generation error:", err);
-                      toast.error("Gagal membuat PDF otomatis. Membuka dialog cetak sistem...", {
-                        id: toastId,
-                      });
-                      window.print();
-                    }
-                  } else {
-                    window.print();
-                  }
-                }}
+                onClick={handleDownloadPdf}
                 className="flex items-center gap-2 rounded-full bg-neutral-800 px-6 py-3 text-xs font-semibold text-white hover:bg-neutral-900 transition-all"
               >
                 <Printer className="h-4 w-4" />
