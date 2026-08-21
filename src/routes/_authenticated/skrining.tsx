@@ -1170,42 +1170,104 @@ function Skrining() {
     }
     const toastId = toast.loading("Sedang menyiapkan dokumen PDF...");
     try {
+      // Pre-convert all images inside the element to inline base64 to avoid CORS tainted canvas errors
+      const images = element.querySelectorAll("img");
+      const originalSrcs: { img: HTMLImageElement; src: string }[] = [];
+      await Promise.all(
+        Array.from(images).map(async (img) => {
+          try {
+            // Skip images that are already data URIs
+            if (img.src.startsWith("data:")) return;
+            // Skip empty or broken images
+            if (!img.src || !img.naturalWidth) return;
+
+            originalSrcs.push({ img, src: img.src });
+
+            // Create an off-screen canvas to convert the image to base64
+            const cvs = document.createElement("canvas");
+            cvs.width = img.naturalWidth;
+            cvs.height = img.naturalHeight;
+            const ctx = cvs.getContext("2d");
+            if (ctx) {
+              // Try loading with CORS first
+              const proxyImg = new Image();
+              proxyImg.crossOrigin = "anonymous";
+              await new Promise<void>((resolve) => {
+                proxyImg.onload = () => {
+                  ctx.drawImage(proxyImg, 0, 0);
+                  try {
+                    img.src = cvs.toDataURL("image/png");
+                  } catch {
+                    // If tainted, just leave the original src — html2canvas will handle or skip it
+                  }
+                  resolve();
+                };
+                proxyImg.onerror = () => resolve();
+                proxyImg.src = img.src;
+              });
+            }
+          } catch {
+            // Silently skip images that can't be converted
+          }
+        }),
+      );
+
       const canvas = await html2canvas(element, {
-        scale: 2,
+        scale: 1.5,
         useCORS: true,
+        allowTaint: true,
         logging: false,
         backgroundColor: "#ffffff",
         scrollX: 0,
-        scrollY: 0,
+        scrollY: -window.scrollY,
         windowWidth: document.documentElement.offsetWidth,
-        windowHeight: document.documentElement.offsetHeight,
+        windowHeight: element.scrollHeight + 100,
         ignoreElements: (el) => !!(el.classList && el.classList.contains("no-print")),
       });
+
+      // Restore original image sources
+      originalSrcs.forEach(({ img, src }) => {
+        img.src = src;
+      });
+
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF("p", "mm", "a4");
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      const pageHeight = pdf.internal.pageSize.getHeight();
 
       let heightLeft = pdfHeight;
       let position = 0;
 
       pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
-      heightLeft -= pdf.internal.pageSize.getHeight();
+      heightLeft -= pageHeight;
 
       while (heightLeft > 10) {
         position = heightLeft - pdfHeight;
         pdf.addPage();
         pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
-        heightLeft -= pdf.internal.pageSize.getHeight();
+        heightLeft -= pageHeight;
       }
 
       pdf.save("Laporan-Skrining-TCM.pdf");
       toast.success("Dokumen PDF berhasil diunduh!", { id: toastId });
     } catch (err) {
       console.error("PDF generation error:", err);
-      toast.error("Gagal mengunduh PDF otomatis. Silakan coba kembali beberapa saat lagi.", {
-        id: toastId,
-      });
+      // Restore original image sources on error
+      try {
+        originalSrcs.forEach(({ img, src }) => {
+          img.src = src;
+        });
+      } catch { /* ignore cleanup errors */ }
+
+      // Fallback: offer browser print dialog
+      toast.error(
+        "Gagal mengunduh PDF otomatis. Membuka dialog cetak browser sebagai alternatif...",
+        { id: toastId, duration: 4000 },
+      );
+      setTimeout(() => {
+        window.print();
+      }, 500);
     }
   };
 
