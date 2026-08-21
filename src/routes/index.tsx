@@ -62,11 +62,24 @@ const reasons = [
 ];
 
 const therapists = [
-  { name: "Imroatus Solikhah, Amd.Akp", role: "Akupunturis" },
   {
-    name: "Master Jun, S.Ud, B.Med, M.T (Biomed)",
-    role: "TCM (Traditional Chinese Medicine)",
+    name: "Agus Supriyadi, S.Pd., S.Ud., B.Med.",
+    role: "Chinese Medicine Doctor (Pendiri & Praktisi Utama)",
+    image: "/profile-1.jpeg",
+    desc: "Praktisi utama Pengobatan Tradisional Tiongkok dengan keahlian holistik mendalam, akupunktur, dan herbal formula personalisasi untuk pemulihan optimal.",
   },
+];
+
+const profileCarousel = [
+  {
+    img: "/profile-1.jpeg",
+    name: "Agus Supriyadi, S.Pd., S.Ud., B.Med.",
+    role: "Pendiri & Dokter Utama",
+  },
+  { img: "/profile-2.jpeg", name: "Konsultasi & Diagnosa TCM", role: "Pemeriksaan Holistik" },
+  { img: "/profile-3.jpeg", name: "Akupunktur Klinis", role: "Terapi Titik Meridian" },
+  { img: "/profile-4.jpeg", name: "Peracikan Herbal", role: "Formula Sesuai Konstitusi" },
+  { img: "/profile-5.jpeg", name: "Tuina & Terapi BSM", role: "Pijat Medis Tradisional" },
 ];
 
 const featured = [
@@ -274,31 +287,78 @@ function Home() {
       </section>
 
       {/* THERAPISTS */}
-      <section className="mx-auto max-w-6xl px-4 py-12 sm:px-5 sm:py-16">
-        <div className="grid gap-12 md:grid-cols-[1fr_1.1fr] md:items-center">
-          <img
-            src={aboutImg}
-            alt="Racikan herbal Tiongkok di klinik"
-            width={1400}
-            height={1000}
-            className="aspect-4/3 w-full rounded-sm object-cover"
-          />
-          <div>
-            <p className="eyebrow">Profil Terapis Kami</p>
-            <h2 className="mt-3 text-2xl leading-tight sm:text-3xl md:text-4xl">
-              Para ahli bersertifikat yang mendampingi pemulihan Anda
-            </h2>
-            <div className="mt-8">
-              {therapistsList.map((t) => (
+      <section className="mx-auto max-w-6xl px-4 py-14 sm:px-5 sm:py-20">
+        <p className="eyebrow">Profil Pemilik &amp; Dokter Utama</p>
+        <h2 className="mt-3 max-w-2xl text-2xl leading-tight sm:text-3xl md:text-4xl">
+          Dipimpin langsung oleh ahli Pengobatan Tradisional Tiongkok
+        </h2>
+        <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+          Rumah Terapy Ikhtiar Sehat didirikan dan dikelola oleh praktisi dan dokter TCM
+          berpengalaman.
+        </p>
+
+        <div className="mt-12 flex justify-center">
+          {therapistsList.map((t) => (
+            <div
+              key={t.name}
+              className="flex flex-col w-full max-w-md rounded-2xl border border-primary/40 bg-primary/5 p-6 shadow-md transition-all hover:shadow-lg"
+            >
+              <div className="relative mb-5 aspect-square w-full overflow-hidden rounded-xl bg-neutral-100 shadow-inner">
+                <img
+                  src={t.image}
+                  alt={t.name}
+                  className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+                  referrerPolicy="no-referrer"
+                />
+                <span className="absolute top-3 left-3 rounded-full bg-primary px-3 py-1 text-xs font-bold text-primary-foreground shadow-sm uppercase tracking-wider">
+                  Pendiri &amp; Dokter Utama
+                </span>
+              </div>
+              <h3 className="text-xl font-bold leading-snug">{t.name}</h3>
+              <p className="mt-1 text-xs font-semibold text-primary">{t.role}</p>
+              <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{t.desc}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Infinity Carousel for profile-1 to profile-5 */}
+        <div className="mt-16 w-full overflow-hidden">
+          <p className="text-center text-xs font-semibold tracking-wider uppercase text-muted-foreground mb-6">
+            Galeri Profil &amp; Praktik Pelayanan
+          </p>
+          <style>{`
+            @keyframes marquee {
+              0% { transform: translateX(0%); }
+              100% { transform: translateX(-50%); }
+            }
+            .animate-marquee {
+              display: flex;
+              width: max-content;
+              animation: marquee 30s linear infinite;
+            }
+            .animate-marquee:hover {
+              animation-play-state: paused;
+            }
+          `}</style>
+          <div className="relative w-full overflow-hidden py-2">
+            <div className="animate-marquee flex gap-6">
+              {[...profileCarousel, ...profileCarousel].map((item, idx) => (
                 <div
-                  key={t.name}
-                  className="flex items-start gap-4 border-b border-border py-5 first:border-t"
+                  key={idx}
+                  className="w-64 shrink-0 overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-xs transition-transform hover:-translate-y-1 hover:shadow-md"
                 >
-                  <Stethoscope className="mt-1 size-5 shrink-0 text-primary" />
-                  <div>
-                    <p className="text-lg leading-snug">{t.name}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{t.role}</p>
+                  <div className="relative mb-3 aspect-4/3 w-full overflow-hidden rounded-xl bg-neutral-100">
+                    <img
+                      src={item.img}
+                      alt={item.name}
+                      className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
+                      referrerPolicy="no-referrer"
+                    />
                   </div>
+                  <h4 className="text-sm font-bold leading-snug text-neutral-900 truncate">
+                    {item.name}
+                  </h4>
+                  <p className="mt-1 text-xs text-primary font-medium">{item.role}</p>
                 </div>
               ))}
             </div>
