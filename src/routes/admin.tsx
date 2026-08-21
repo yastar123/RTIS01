@@ -2193,6 +2193,7 @@ function ScreeningDetailModal({
                       src={item.tonguePhotoUrl}
                       alt="Foto Lidah Pasien"
                       className="h-28 w-auto rounded border object-cover shadow-2xs"
+                      crossOrigin="anonymous"
                     />
                   </div>
                 )}
@@ -2259,6 +2260,12 @@ function ScreeningDetailModal({
                   scale: 2,
                   useCORS: true,
                   logging: false,
+                  backgroundColor: "#ffffff",
+                  scrollX: 0,
+                  scrollY: 0,
+                  windowWidth: document.documentElement.offsetWidth,
+                  windowHeight: document.documentElement.offsetHeight,
+                  ignoreElements: (el) => !!(el.classList && el.classList.contains("no-print")),
                 });
                 const imgData = canvas.toDataURL("image/png");
                 const pdf = new jsPDF("p", "mm", "a4");
@@ -2271,7 +2278,7 @@ function ScreeningDetailModal({
                 pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
                 heightLeft -= pdf.internal.pageSize.getHeight();
 
-                while (heightLeft >= 0) {
+                while (heightLeft > 10) {
                   position = heightLeft - pdfHeight;
                   pdf.addPage();
                   pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);

@@ -275,6 +275,126 @@ const defaultQuestions: ScreeningQuestion[] = [
   { id: "dq10", questionText: "BAB saya terasa lengket, basah, atau sulit dibersihkan." },
 ];
 
+interface DecodedPayload {
+  nama?: string;
+  usia?: string | number;
+  kelamin?: string;
+  tinggi?: string | number;
+  berat?: string | number;
+  keluhan?: string;
+  complaints?: string;
+  tonguePhoto?: string;
+  tonguePhotoUrl?: string;
+  hospitalDocs?: MedicalDocumentItem[];
+  answers?: Record<string, number>;
+}
+
+const robustDecodePayload = (encodedStr: string): DecodedPayload | null => {
+  let cleaned = encodedStr.replace(/ /g, "+").trim();
+
+  // Repair Base64 padding if it is incorrect
+  while (cleaned.length % 4 !== 0) {
+    cleaned += "=";
+  }
+
+  let rawDecoded = "";
+  try {
+    rawDecoded = atob(cleaned);
+  } catch (err) {
+    try {
+      const base64Cleaned = cleaned.replace(/[^A-Za-z0-9+/=]/g, "");
+      rawDecoded = atob(base64Cleaned);
+    } catch (err2) {
+      console.error("Critical base64 decode failure:", err2);
+      return null;
+    }
+  }
+
+  // Try decoding with and without decodeURIComponent
+  let jsonStr = "";
+  try {
+    jsonStr = decodeURIComponent(rawDecoded);
+  } catch {
+    jsonStr = rawDecoded; // Fallback to raw if URI malformed
+  }
+
+  // Try standard JSON.parse
+  try {
+    return JSON.parse(jsonStr) as DecodedPayload;
+  } catch (parseErr) {
+    console.warn("JSON parse failed, attempting string repair for truncated payload:", parseErr);
+    // Extract properties via regex as fallback
+    const result: DecodedPayload = {
+      nama: "",
+      usia: "25",
+      kelamin: "L",
+      tinggi: "165",
+      berat: "60",
+      keluhan: "",
+      tonguePhoto: "",
+      hospitalDocs: [],
+      answers: {},
+    };
+
+    const matchPropString = (propName: string) => {
+      const regex = new RegExp(`"${propName}"\\s*:\\s*"([^"]*)"`);
+      const match = jsonStr.match(regex);
+      return match ? match[1] : null;
+    };
+
+    const matchPropNumber = (propName: string) => {
+      const regex = new RegExp(`"${propName}"\\s*:\\s*([0-9.]+)`);
+      const match = jsonStr.match(regex);
+      return match ? match[1] : null;
+    };
+
+    const nama = matchPropString("nama");
+    if (nama !== null) result.nama = nama;
+
+    const usia = matchPropNumber("usia") || matchPropString("usia");
+    if (usia !== null) result.usia = String(usia);
+
+    const kelamin = matchPropString("kelamin");
+    if (kelamin !== null) result.kelamin = kelamin;
+
+    const tinggi = matchPropNumber("tinggi") || matchPropString("tinggi");
+    if (tinggi !== null) result.tinggi = String(tinggi);
+
+    const berat = matchPropNumber("berat") || matchPropString("berat");
+    if (berat !== null) result.berat = String(berat);
+
+    const keluhan = matchPropString("keluhan");
+    if (keluhan !== null) result.keluhan = keluhan;
+
+    const tonguePhoto = matchPropString("tonguePhoto");
+    if (tonguePhoto !== null) result.tonguePhoto = tonguePhoto;
+
+    // Extract answers object if partially intact
+    try {
+      const answersIndex = jsonStr.indexOf('"answers"');
+      if (answersIndex !== -1) {
+        const subStr = jsonStr.substring(answersIndex);
+        const openBrace = subStr.indexOf("{");
+        if (openBrace !== -1) {
+          const uuidRegex = /"([a-f0-9-]{36})"\s*:\s*([0-9]+)/gi;
+          let match;
+          const extractedAnswers: Record<string, number> = {};
+          while ((match = uuidRegex.exec(subStr)) !== null) {
+            extractedAnswers[match[1]] = Number(match[2]);
+          }
+          if (Object.keys(extractedAnswers).length > 0) {
+            result.answers = extractedAnswers;
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Gagal mengekstrak jawaban terpotong:", e);
+    }
+
+    return result;
+  }
+};
+
 function Skrining() {
   const { user } = useAuth();
 
@@ -350,16 +470,15 @@ function Skrining() {
     if (resultDataParam) {
       setIsViewingShared(true);
       try {
-        const cleanedParam = resultDataParam.replace(/ /g, "+");
-        const decoded = JSON.parse(decodeURIComponent(atob(cleanedParam)));
+        const decoded = robustDecodePayload(resultDataParam);
         if (decoded) {
           setNama(decoded.nama || "");
           setUsia(decoded.usia ? String(decoded.usia) : "25");
           setKelamin(decoded.kelamin || "L");
           setTinggi(decoded.tinggi ? String(decoded.tinggi) : "165");
           setBerat(decoded.berat ? String(decoded.berat) : "60");
-          setKeluhan(decoded.keluhan || "");
-          setTonguePhoto(decoded.tonguePhoto || "");
+          setKeluhan(decoded.keluhan || decoded.complaints || "");
+          setTonguePhoto(decoded.tonguePhoto || decoded.tonguePhotoUrl || "");
           if (decoded.hospitalDocs && Array.isArray(decoded.hospitalDocs)) {
             setHospitalDocs(decoded.hospitalDocs);
           }
@@ -1053,6 +1172,12 @@ function Skrining() {
         scale: 2,
         useCORS: true,
         logging: false,
+        backgroundColor: "#ffffff",
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: document.documentElement.offsetWidth,
+        windowHeight: document.documentElement.offsetHeight,
+        ignoreElements: (el) => !!(el.classList && el.classList.contains("no-print")),
       });
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF("p", "mm", "a4");
@@ -1065,7 +1190,7 @@ function Skrining() {
       pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
       heightLeft -= pdf.internal.pageSize.getHeight();
 
-      while (heightLeft >= 0) {
+      while (heightLeft > 10) {
         position = heightLeft - pdfHeight;
         pdf.addPage();
         pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
@@ -1551,6 +1676,7 @@ function Skrining() {
                   src="/logo.png"
                   alt="Logo Rumah Terapy"
                   className="h-20 w-auto rounded-xl border p-1"
+                  crossOrigin="anonymous"
                 />
                 <div>
                   <h1 className="font-display text-2xl font-black uppercase tracking-wider text-neutral-900 sm:text-3xl">
@@ -1696,6 +1822,7 @@ function Skrining() {
                         alt="Lidah Pasien"
                         className="h-28 w-28 rounded-lg border border-neutral-300 object-cover shadow-2xs"
                         referrerPolicy="no-referrer"
+                        crossOrigin="anonymous"
                       />
                       <div className="absolute -bottom-1.5 -right-1.5 rounded-full bg-primary p-0.5 text-white shadow-xs">
                         <CheckCircle className="h-3.5 w-3.5" />
@@ -1757,7 +1884,7 @@ function Skrining() {
                   </button>
                 </div>
 
-                <div className="mt-3 space-y-2 max-h-36 overflow-y-auto pr-1">
+                <div className="mt-3 space-y-2 pr-1">
                   {hospitalDocs.length > 0 ? (
                     hospitalDocs.map((doc) => {
                       const isImg =
@@ -1774,6 +1901,7 @@ function Skrining() {
                                 src={doc.url}
                                 alt={doc.name}
                                 className="h-7 w-7 rounded object-cover border shrink-0"
+                                crossOrigin="anonymous"
                               />
                             ) : (
                               <div className="h-7 w-7 rounded bg-primary/10 text-primary flex items-center justify-center shrink-0">
