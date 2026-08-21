@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent, useRef, useCallback } from "react";
-import html2canvas from "html2canvas";
+import html2canvas from "html2canvas-pro";
 import { jsPDF } from "jspdf";
 import { createFileRoute, Link } from "@/lib/route";
 import { useAuth, authHeaders, useProfile } from "@/hooks/use-auth";
