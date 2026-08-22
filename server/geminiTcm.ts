@@ -1,3 +1,5 @@
+import { GoogleGenAI } from "@google/genai";
+
 export interface HospitalDocItem {
   id?: string;
   name: string;
@@ -7,7 +9,7 @@ export interface HospitalDocItem {
 }
 
 export interface PatientScreeningInput {
-  answers: Record<string, number>;
+  answers: Record<string, string | number>;
   questions?: Array<{ id: string; questionText: string }>;
   patientProfile?: {
     name?: string;
@@ -655,16 +657,17 @@ export function generateFallbackTcmAnalysis(input: PatientScreeningInput): TcmAi
 }
 
 /**
- * Calls OpenRouter AI model to generate holistic TCM & Herbal analysis
+ * Calls Gemini AI or OpenRouter model to generate holistic TCM & Herbal analysis
  */
 export async function generateOpenRouterTcmAnalysis(
   input: PatientScreeningInput,
 ): Promise<TcmAiAnalysisResponse> {
+  const geminiApiKey = (process.env.GEMINI_API_KEY || "").trim();
   const openRouterApiKey = (process.env.OPENROUTER_API_KEY || "").trim();
 
-  if (!openRouterApiKey) {
+  if (!geminiApiKey && !openRouterApiKey) {
     console.warn(
-      "[OpenRouter TCM] OPENROUTER_API_KEY tidak ditemukan di environment. Menggunakan TCM knowledge engine fallback.",
+      "[TCM AI Engine] Neither GEMINI_API_KEY nor OPENROUTER_API_KEY found in environment. Using TCM knowledge engine fallback.",
     );
     return generateFallbackTcmAnalysis(input);
   }
@@ -687,13 +690,24 @@ export async function generateOpenRouterTcmAnalysis(
             .join("\n")
         : "Tidak ada lampiran dokumen/foto rumah sakit tambahan.";
 
-    const questionsList = (input.questions || [])
-      .map((q, idx) => {
-        const ansVal = input.answers[q.id] ?? 0;
-        const labels = ["Tidak pernah (0 pt)", "Kadang (1 pt)", "Sering (2 pt)", "Selalu (3 pt)"];
-        return `${idx + 1}. [${q.id}] ${q.questionText} -> Jawaban Pasien: ${labels[ansVal] || ansVal}`;
-      })
-      .join("\n");
+    let questionsList = "";
+    if (input.questions && input.questions.length > 0) {
+      questionsList = input.questions
+        .map((q, idx) => {
+          const ansVal = input.answers[q.id];
+          if (ansVal === undefined || ansVal === null) return `${idx + 1}. [${q.id}] ${q.questionText} -> Jawaban Pasien: -(Belum diisi)-`;
+          if (typeof ansVal === "number") {
+            const labels = ["Tidak pernah (0 pt)", "Kadang (1 pt)", "Sering (2 pt)", "Selalu (3 pt)"];
+            return `${idx + 1}. [${q.id}] ${q.questionText} -> Jawaban Pasien: ${labels[ansVal] || `${ansVal} pt`}`;
+          }
+          return `${idx + 1}. [${q.id}] ${q.questionText} -> Jawaban Pasien: "${ansVal}"`;
+        })
+        .join("\n");
+    } else {
+      questionsList = Object.entries(input.answers || {})
+        .map(([k, v], idx) => `${idx + 1}. [${k}] -> Jawaban Pasien: "${v}"`)
+        .join("\n");
+    }
 
     const promptText = `
 Anda adalah seorang Dokter / Sinshe Senior Konsultan Traditional Chinese Medicine (TCM) dan Herbalis Holistik Terakreditasi di klinik "Rumah Terapy Ikhtiar Sehat".
@@ -840,87 +854,125 @@ BERIKAN OUTPUT DALAM FORMAT JSON PERSIS DENGAN STRUKTUR BERIKUT:
 PASTIKAN SEMUA TEXT DALAM BAHASA INDONESIA YANG BAIK, JELAS, PROFESIONAL, EMPATIK, DAN MUDAH DIPAHAMI OLEH PASIEN MAUPUN PRAKTISI TCM.
 `;
 
-    const candidateModels = [
-      process.env.OPENROUTER_MODEL,
-      "nvidia/nemotron-3-ultra-550b-a55b:free",
-      "google/gemini-2.0-flash-001",
-      "meta-llama/llama-3.3-70b-instruct:free",
-      "deepseek/deepseek-r1:free",
-      "openai/gpt-4o-mini",
-    ].filter(Boolean) as string[];
-
-    for (const modelToUse of candidateModels) {
+    if (geminiApiKey) {
       try {
-        console.log(`[OpenRouter TCM] Mengirimkan request ke model: ${modelToUse}`);
-        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${openRouterApiKey}`,
-            "HTTP-Referer": "https://rumahterapyikhtiarsehat.my.id",
-            "X-Title": "Rumah Terapy Ikhtiar Sehat",
-          },
-          body: JSON.stringify({
-            model: modelToUse,
-            messages: [
-              {
-                role: "system",
-                content:
-                  "Anda adalah pakar Traditional Chinese Medicine (TCM), Sinse, dan Herbalis Indonesia & China terkemuka. Selalu kembalikan respon dalam format JSON murni yang valid tanpa awalan/akhiran penjelasan.",
-              },
-              {
-                role: "user",
-                content: promptText,
-              },
-            ],
+        console.log("[TCM AI Engine] Generating TCM analysis using Gemini API...");
+        const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: promptText,
+          config: {
+            systemInstruction:
+              "Anda adalah pakar Traditional Chinese Medicine (TCM), Sinse, dan Herbalis Indonesia & China terkemuka. Selalu kembalikan respon dalam format JSON murni yang valid tanpa awalan/akhiran penjelasan.",
+            responseMimeType: "application/json",
             temperature: 0.3,
-          }),
+          },
         });
 
-        if (!response.ok) {
-          const errText = await response.text();
-          console.warn(`[OpenRouter TCM] Model ${modelToUse} HTTP ${response.status}: ${errText}`);
-          continue;
-        }
-
-        const resData = (await response.json()) as {
-          choices?: Array<{ message?: { content?: string } }>;
-        };
-        const rawContent = resData?.choices?.[0]?.message?.content?.trim();
-
-        if (!rawContent) {
-          console.warn(`[OpenRouter TCM] Model ${modelToUse} mengembalikan respon kosong.`);
-          continue;
-        }
-
-        let cleaned = rawContent;
-        if (cleaned.startsWith("```")) {
-          cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-        }
-        const firstBrace = cleaned.indexOf("{");
-        const lastBrace = cleaned.lastIndexOf("}");
-        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-          cleaned = cleaned.slice(firstBrace, lastBrace + 1);
-        }
-        cleaned = cleaned.trim();
-
-        try {
-          const parsedData = JSON.parse(cleaned) as TcmAiAnalysisResponse;
+        const rawContent = response.text?.trim();
+        if (rawContent) {
+          let cleaned = rawContent;
+          if (cleaned.startsWith("```")) {
+            cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+          }
+          const firstBrace = cleaned.indexOf("{");
+          const lastBrace = cleaned.lastIndexOf("}");
+          if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+            cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+          }
+          const parsedData = JSON.parse(cleaned.trim()) as TcmAiAnalysisResponse;
           parsedData.isAiGenerated = true;
-          console.log(`[OpenRouter TCM] Berhasil generate analisa AI dengan model ${modelToUse}!`);
+          console.log("[TCM AI Engine] Berhasil generate analisa TCM dengan Gemini API!");
           return parsedData;
-        } catch (parseErr) {
-          console.warn(`[OpenRouter TCM] Gagal parse JSON dari model ${modelToUse}:`, parseErr);
         }
-      } catch (reqErr) {
-        console.warn(`[OpenRouter TCM] Error saat menghubungi model ${modelToUse}:`, reqErr);
+      } catch (geminiErr) {
+        console.warn("[TCM AI Engine] Gemini API call error:", geminiErr);
       }
     }
 
-    console.warn("[OpenRouter TCM] Semua model OpenRouter gagal, menggunakan fallback engine.");
+    if (openRouterApiKey) {
+      const candidateModels = [
+        process.env.OPENROUTER_MODEL,
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "google/gemini-2.0-flash-001",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "deepseek/deepseek-r1:free",
+        "openai/gpt-4o-mini",
+      ].filter(Boolean) as string[];
+
+      for (const modelToUse of candidateModels) {
+        try {
+          console.log(`[OpenRouter TCM] Mengirimkan request ke model: ${modelToUse}`);
+          const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${openRouterApiKey}`,
+              "HTTP-Referer": "https://rumahterapyikhtiarsehat.my.id",
+              "X-Title": "Rumah Terapy Ikhtiar Sehat",
+            },
+            body: JSON.stringify({
+              model: modelToUse,
+              messages: [
+                {
+                  role: "system",
+                  content:
+                    "Anda adalah pakar Traditional Chinese Medicine (TCM), Sinse, dan Herbalis Indonesia & China terkemuka. Selalu kembalikan respon dalam format JSON murni yang valid tanpa awalan/akhiran penjelasan.",
+                },
+                {
+                  role: "user",
+                  content: promptText,
+                },
+              ],
+              temperature: 0.3,
+            }),
+          });
+
+          if (!response.ok) {
+            const errText = await response.text();
+            console.warn(`[OpenRouter TCM] Model ${modelToUse} HTTP ${response.status}: ${errText}`);
+            continue;
+          }
+
+          const resData = (await response.json()) as {
+            choices?: Array<{ message?: { content?: string } }>;
+          };
+          const rawContent = resData?.choices?.[0]?.message?.content?.trim();
+
+          if (!rawContent) {
+            console.warn(`[OpenRouter TCM] Model ${modelToUse} mengembalikan respon kosong.`);
+            continue;
+          }
+
+          let cleaned = rawContent;
+          if (cleaned.startsWith("```")) {
+            cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+          }
+          const firstBrace = cleaned.indexOf("{");
+          const lastBrace = cleaned.lastIndexOf("}");
+          if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+            cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+          }
+          cleaned = cleaned.trim();
+
+          try {
+            const parsedData = JSON.parse(cleaned) as TcmAiAnalysisResponse;
+            parsedData.isAiGenerated = true;
+            console.log(`[OpenRouter TCM] Berhasil generate analisa AI dengan model ${modelToUse}!`);
+            return parsedData;
+          } catch (parseErr) {
+            console.warn(`[OpenRouter TCM] Gagal parse JSON dari model ${modelToUse}:`, parseErr);
+          }
+        } catch (reqErr) {
+          console.warn(`[OpenRouter TCM] Error saat menghubungi model ${modelToUse}:`, reqErr);
+        }
+      }
+    }
+
+    console.warn("[TCM AI Engine] Semua model AI gagal, menggunakan fallback engine.");
     return generateFallbackTcmAnalysis(input);
   } catch (error) {
-    console.error("[OpenRouter TCM] Exception saat proses AI:", error);
+    console.error("[TCM AI Engine] Exception saat proses AI:", error);
     return generateFallbackTcmAnalysis(input);
   }
 }

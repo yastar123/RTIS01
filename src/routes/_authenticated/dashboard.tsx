@@ -62,6 +62,8 @@ import {
   X,
 } from "lucide-react";
 import { TcmHerbalReport, type TcmScreeningReport } from "@/components/screening/TcmHerbalReport";
+import { TcmQuestionnaireForm } from "@/components/screening/TcmQuestionnaireForm";
+import { TCM_SECTIONS, getTotalQuestionCount, getAnsweredQuestionCount } from "@/data/tcmQuestions";
 import { calculateTcmResult, getDominantConstitution, createTcmScreeningReportHelpers } from "@/lib/tcm";
 import { useAuth, useProfile, authHeaders } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -93,18 +95,16 @@ import {
   type ServiceOption,
 } from "@/lib/reservations";
 
-const sanitizePayloadAnswers = (rawAnswers: unknown): Record<string, number> => {
+const sanitizePayloadAnswers = (rawAnswers: unknown): Record<string, string | number> => {
   if (!rawAnswers || typeof rawAnswers !== "object") return {};
   const obj = rawAnswers as Record<string, unknown>;
   const src =
     obj.answers && typeof obj.answers === "object" ? (obj.answers as Record<string, unknown>) : obj;
 
-  const clean: Record<string, number> = {};
+  const clean: Record<string, string | number> = {};
   for (const [key, val] of Object.entries(src)) {
-    if (typeof val === "number") {
+    if (typeof val === "number" || typeof val === "string") {
       clean[key] = val;
-    } else if (typeof val === "string" && !isNaN(Number(val))) {
-      clean[key] = Number(val);
     }
   }
   return clean;
@@ -3427,7 +3427,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
   );
 
   // Patient answers & multi-step flow state
-  const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [screeningStep, setScreeningStep] = useState<"questions" | "detail" | "confirm">(
     "questions",
   );
@@ -3883,32 +3883,36 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
     }
   };
 
-  const answeredCount = Object.keys(answers).length;
-  const isComplete = questions.length > 0 && answeredCount === questions.length;
-  const totalScore = Object.values(answers).reduce((a, b) => a + b, 0);
-  const maxPossibleScore = questions.length * 3;
-  const scoreRatio = maxPossibleScore > 0 ? totalScore / maxPossibleScore : 0;
+  const answeredCount = Object.keys(answers).filter(
+    (k) => answers[k] !== undefined && answers[k] !== null && String(answers[k]).trim().length > 0,
+  ).length;
+  const isPatientFemale =
+    profile?.gender?.toLowerCase().includes("perempuan") ||
+    profile?.gender?.toLowerCase() === "p" ||
+    answers["a3_jenis_kelamin"]?.toLowerCase().includes("perempuan") ||
+    false;
+  const totalScreeningQuestions = getTotalQuestionCount(isPatientFemale);
+  const isComplete = answeredCount > 0;
+  const calculatedTcm = calculateTcmResult(answers, totalScreeningQuestions);
+  const totalScore = calculatedTcm.totalScore;
+  const maxPossibleScore = 100;
+  const scoreRatio = totalScore / 100;
 
   const getResult = () => {
-    if (scoreRatio <= 0.2)
-      return {
-        level: "Rendah",
-        color: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30",
-        advice:
-          "Kondisi tubuh Anda relatif seimbang. Pertahankan pola hidup sehat, nutrisi seimbang, dan istirahat teratur.",
-      };
-    if (scoreRatio <= 0.55)
-      return {
-        level: "Sedang",
-        color: "bg-amber-500/10 text-amber-700 border-amber-500/30",
-        advice:
-          "Terdapat beberapa indikasi ketidakseimbangan energi/qi. Disarankan melakukan konsultasi awal untuk menentukan terapi pendukung yang tepat.",
-      };
     return {
-      level: "Tinggi",
-      color: "bg-rose-500/10 text-rose-700 border-rose-500/30",
+      level: calculatedTcm.level,
+      color:
+        calculatedTcm.level === "Rendah"
+          ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
+          : calculatedTcm.level === "Sedang"
+            ? "bg-amber-500/10 text-amber-700 border-amber-500/30"
+            : "bg-rose-500/10 text-rose-700 border-rose-500/30",
       advice:
-        "Banyak tanda ketidakseimbangan signifikan terdeteksi. Kami menyarankan Anda menjadwalkan konsultasi mendalam dengan praktisi kami agar dapat ditangani secara dini.",
+        calculatedTcm.level === "Rendah"
+          ? "Kondisi tubuh Anda relatif seimbang. Pertahankan pola hidup sehat, nutrisi seimbang, dan istirahat teratur."
+          : calculatedTcm.level === "Sedang"
+            ? "Terdapat beberapa indikasi ketidakseimbangan energi/qi. Disarankan melakukan konsultasi awal untuk menentukan terapi pendukung yang tepat."
+            : "Banyak tanda ketidakseimbangan signifikan terdeteksi. Kami menyarankan Anda menjadwalkan konsultasi mendalam dengan praktisi kami agar dapat ditangani secara dini.",
     };
   };
 
@@ -5098,103 +5102,34 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                 </div>
               </div>
 
-              {/* TAHAP 1: KUESIONER GEJALA TCM */}
+              {/* TAHAP 1: KUESIONER GEJALA TCM DENGAN FORM INPUT */}
               {screeningStep === "questions" && (
                 <div className="space-y-4">
-                  <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-sm font-semibold text-foreground">
-                        Langkah 1: Jawab Kuesioner Gejala Klinis TCM
-                      </h3>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Pilih frekuensi keluhan yang paling menggambarkan kondisi tubuh Anda dalam
-                        1-2 minggu terakhir.
-                      </p>
-                    </div>
-                    <Badge variant="secondary" className="text-xs shrink-0">
-                      {answeredCount} / {questions.length} Selesai
-                    </Badge>
-                  </div>
-
-                  {questions.length === 0 ? (
-                    <Card className="p-8 text-center bg-card">
-                      <p className="text-sm font-medium text-foreground">
-                        Belum ada pertanyaan skrening yang tersedia.
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Admin dapat menambah pertanyaan dari menu pengelolaan.
-                      </p>
-                    </Card>
-                  ) : (
-                    <div className="space-y-4">
-                      {paginatedQuestions.map((q, idx) => {
-                        const globalIdx = (screeningCurrentPage - 1) * 10 + idx;
-                        return (
-                          <Card key={q.id} className="bg-card shadow-xs">
-                            <CardContent className="p-3.5 sm:p-5">
-                              <p className="text-xs sm:text-sm font-medium text-foreground leading-relaxed">
-                                {globalIdx + 1}. {q.questionText}
-                              </p>
-                              <div className="mt-3 grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
-                                {[
-                                  ["Tidak pernah", 0],
-                                  ["Kadang", 1],
-                                  ["Sering", 2],
-                                  ["Selalu", 3],
-                                ].map(([label, val]) => {
-                                  const active = answers[q.id] === val;
-                                  return (
-                                    <button
-                                      key={label as string}
-                                      type="button"
-                                      onClick={() =>
-                                        setAnswers((prev) => ({ ...prev, [q.id]: val as number }))
-                                      }
-                                      className={`rounded-full px-3 py-1.5 text-center text-xs transition-colors ${
-                                        active
-                                          ? "bg-primary text-primary-foreground shadow-xs font-medium"
-                                          : "border border-border text-muted-foreground hover:border-primary hover:text-primary"
-                                      }`}
-                                    >
-                                      {label as string}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
-
-                      <PaginationControls
-                        currentPage={screeningCurrentPage}
-                        totalPages={totalScreeningPages}
-                        totalItems={questions.length}
-                        itemsPerPage={10}
-                        onPageChange={setScreeningCurrentPage}
-                      />
-                    </div>
-                  )}
-
-                  {questions.length > 0 && (
-                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t">
-                      <span className="text-xs text-muted-foreground">
-                        {answeredCount} dari {questions.length} pertanyaan dijawab (
-                        {Math.round((answeredCount / (questions.length || 1)) * 100)}%)
-                      </span>
-                      <Button
-                        disabled={!isComplete}
-                        onClick={() => {
-                          setScreeningStep("detail");
-                          window.scrollTo({ top: 0, behavior: "smooth" });
-                        }}
-                        className="w-full sm:w-auto gap-2"
-                      >
-                        Lanjut ke Tahap 2: Foto Lidah & Keluhan
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  )}
+                  <TcmQuestionnaireForm
+                    answers={answers}
+                    onChange={(nextAnswers) => setAnswers(nextAnswers)}
+                    onComplete={() => {
+                      // Auto-populate complaints from B1 / C1 if empty
+                      if (!complaints) {
+                        const compParts = [
+                          answers["b1_keluhan_utama"],
+                          answers["c1_lokasi_keluhan"],
+                          answers["b6_bagian_tubuh"],
+                        ].filter(Boolean);
+                        if (compParts.length > 0) {
+                          setComplaints(compParts.join(" - "));
+                        }
+                      }
+                      setScreeningStep("detail");
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                    patientProfile={{
+                      fullName: profile?.fullName || user?.name,
+                      age: profile?.age,
+                      gender: profile?.gender,
+                      phone: profile?.phone,
+                    }}
+                  />
                 </div>
               )}
 
@@ -5592,13 +5527,13 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                         <div className="flex justify-between border-b pb-1.5">
                           <span className="text-muted-foreground">Jumlah Soal Terisi:</span>
                           <span className="font-semibold text-emerald-600">
-                            {Object.keys(answers).length} dari {questions.length} (100% Lengkap)
+                            {answeredCount} dari {totalScreeningQuestions} Pertanyaan
                           </span>
                         </div>
                         <div className="flex justify-between border-b pb-1.5">
-                          <span className="text-muted-foreground">Total Skor Gejala:</span>
+                          <span className="text-muted-foreground">Skor Indikasi Gejala:</span>
                           <span className="font-medium text-foreground">
-                            {totalScore} dari maksimal {maxPossibleScore}
+                            {totalScore} / {maxPossibleScore}
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
@@ -5934,68 +5869,67 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="text-sm font-semibold text-foreground">
-                      Riwayat Pengisian & Detail Jawaban Soal
+                      Riwayat Pengisian & Detail Jawaban Anamnesis
                     </h4>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Rincian jawaban yang baru saja Anda isi pada kuesioner skrining:
+                      Rincian jawaban formulir yang baru saja Anda isi:
                     </p>
                   </div>
                   <Badge variant="secondary" className="text-xs">
-                    {Object.keys(answers).length} / {questions.length} Dijawab
+                    {answeredCount} / {totalScreeningQuestions} Terisi
                   </Badge>
                 </div>
 
                 <div className="space-y-3">
-                  {questions
-                    .slice((submittedQuestionsPage - 1) * 5, submittedQuestionsPage * 5)
+                  {TCM_SECTIONS.filter((s) => !s.femaleOnly || isPatientFemale)
+                    .flatMap((s) =>
+                      s.questions.map((q) => ({
+                        ...q,
+                        sectionLetter: s.letter,
+                        sectionTitle: s.title,
+                      })),
+                    )
+                    .filter(
+                      (q) =>
+                        answers[q.id] !== undefined &&
+                        String(answers[q.id]).trim().length > 0,
+                    )
+                    .slice((submittedQuestionsPage - 1) * 8, submittedQuestionsPage * 8)
                     .map((q, idx) => {
-                      const globalIdx = (submittedQuestionsPage - 1) * 5 + idx;
+                      const globalIdx = (submittedQuestionsPage - 1) * 8 + idx;
                       const answerVal = answers[q.id];
-                      const labels = [
-                        { label: "Tidak pernah", score: 0 },
-                        { label: "Kadang", score: 1 },
-                        { label: "Sering", score: 2 },
-                        { label: "Selalu", score: 3 },
-                      ];
                       return (
                         <div
                           key={q.id}
-                          className="p-3.5 bg-muted/30 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs sm:text-sm"
+                          className="p-3.5 bg-muted/30 rounded-xl border flex flex-col sm:flex-row sm:items-start justify-between gap-3 text-xs sm:text-sm"
                         >
                           <div className="space-y-1 flex-1">
-                            <span className="text-[11px] font-bold text-primary">
-                              Soal #{globalIdx + 1}
-                            </span>
-                            <p className="font-medium text-foreground">{q.questionText}</p>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                                Bagian {q.sectionLetter}
+                              </Badge>
+                              <span className="text-[11px] font-bold text-primary">
+                                Soal #{globalIdx + 1}
+                              </span>
+                            </div>
+                            <p className="font-medium text-foreground">{q.label}</p>
                           </div>
-                          <div className="flex flex-wrap gap-1.5 shrink-0">
-                            {labels.map((opt) => {
-                              const active = answerVal === opt.score;
-                              return (
-                                <span
-                                  key={opt.score}
-                                  className={`rounded-md px-2 py-0.5 text-[11px] ${
-                                    active
-                                      ? "bg-primary text-primary-foreground font-semibold"
-                                      : "bg-muted text-muted-foreground opacity-60 border"
-                                  }`}
-                                >
-                                  {opt.label} ({opt.score})
-                                </span>
-                              );
-                            })}
+                          <div className="sm:max-w-xs md:max-w-md w-full sm:w-auto text-left sm:text-right shrink-0">
+                            <span className="inline-block rounded-lg px-3 py-1.5 text-xs font-semibold bg-primary/10 text-primary border border-primary/20 break-words">
+                              {String(answerVal)}
+                            </span>
                           </div>
                         </div>
                       );
                     })}
                 </div>
 
-                {questions.length > 5 && (
+                {answeredCount > 8 && (
                   <PaginationControls
                     currentPage={submittedQuestionsPage}
-                    totalPages={Math.ceil(questions.length / 5) || 1}
-                    totalItems={questions.length}
-                    itemsPerPage={5}
+                    totalPages={Math.ceil(answeredCount / 8) || 1}
+                    totalItems={answeredCount}
+                    itemsPerPage={8}
                     onPageChange={setSubmittedQuestionsPage}
                   />
                 )}

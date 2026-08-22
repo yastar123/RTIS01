@@ -20,6 +20,7 @@ import {
   tutorials,
 } from "./db/schema";
 import { generateOpenRouterTcmAnalysis } from "./geminiTcm";
+import { TCM_SECTIONS } from "../src/data/tcmQuestions";
 
 const app = express();
 app.use(express.json({ limit: "50mb" }));
@@ -979,6 +980,94 @@ app.get("/api/screening/questions", async (_req, res) => {
     res
       .status(503)
       .json({ message: error instanceof Error ? error.message : "Gagal memuat soal skrining." });
+  }
+});
+
+/* Full TCM Screening Sections & Questions CMS */
+app.get("/api/screening/sections", async (_req, res) => {
+  try {
+    const db = getDb();
+    const rows = await db
+      .select()
+      .from(cmsContent)
+      .where(eq(cmsContent.pageKey, "tcm_questionnaire_sections"))
+      .limit(1);
+
+    if (rows.length > 0 && rows[0].contentJson) {
+      try {
+        const parsed = JSON.parse(rows[0].contentJson);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return res.json(parsed);
+        }
+      } catch (e) {
+        console.error("Gagal parse tcm_questionnaire_sections:", e);
+      }
+    }
+
+    // Default fallback to TCM_SECTIONS
+    res.json(TCM_SECTIONS);
+  } catch (error) {
+    res.status(503).json({
+      message: error instanceof Error ? error.message : "Gagal memuat daftar soal skrining TCM.",
+    });
+  }
+});
+
+app.put("/api/admin/screening/sections", async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    const { sections } = req.body as { sections?: unknown };
+    if (!sections || !Array.isArray(sections)) {
+      return res.status(400).json({ message: "Format data bagian soal tidak valid." });
+    }
+
+    const db = getDb();
+    const existing = await db
+      .select()
+      .from(cmsContent)
+      .where(eq(cmsContent.pageKey, "tcm_questionnaire_sections"))
+      .limit(1);
+
+    const jsonStr = JSON.stringify(sections);
+
+    if (existing.length > 0) {
+      await db
+        .update(cmsContent)
+        .set({
+          contentJson: jsonStr,
+          updatedAt: new Date(),
+        })
+        .where(eq(cmsContent.pageKey, "tcm_questionnaire_sections"));
+    } else {
+      await db.insert(cmsContent).values({
+        pageKey: "tcm_questionnaire_sections",
+        title: "Kuesioner Skrining TCM Bagian A-L",
+        description: "Daftar bagian dan soal-soal skrining mandiri TCM & Akupunktur",
+        heroTitle: "Skrining Kesehatan TCM",
+        heroSubtitle: "Formulir Anamnesis Lengkap",
+        contentJson: jsonStr,
+      });
+    }
+
+    res.json({ ok: true, message: "Daftar soal skrining TCM berhasil disimpan!" });
+  } catch (error) {
+    res.status(503).json({
+      message: error instanceof Error ? error.message : "Gagal menyimpan soal skrining TCM.",
+    });
+  }
+});
+
+app.post("/api/admin/screening/sections/reset", async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    const db = getDb();
+    await db.delete(cmsContent).where(eq(cmsContent.pageKey, "tcm_questionnaire_sections"));
+
+    res.json({ ok: true, message: "Soal skrining berhasil di-reset ke standar TCM awal." });
+  } catch (error) {
+    res.status(503).json({
+      message: error instanceof Error ? error.message : "Gagal mereset soal skrining TCM.",
+    });
   }
 });
 

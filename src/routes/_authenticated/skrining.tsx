@@ -33,6 +33,8 @@ import {
   Video,
 } from "lucide-react";
 import { TcmHerbalReport, TcmScreeningReport } from "@/components/screening/TcmHerbalReport";
+import { TcmQuestionnaireForm } from "@/components/screening/TcmQuestionnaireForm";
+import { TcmQuestionSection, TCM_SECTIONS, formatAnswersForPrompt } from "@/data/tcmQuestions";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/skrining")({
@@ -286,7 +288,7 @@ interface DecodedPayload {
   tonguePhoto?: string;
   tonguePhotoUrl?: string;
   hospitalDocs?: MedicalDocumentItem[];
-  answers?: Record<string, number>;
+  answers?: Record<string, string | number>;
 }
 
 const robustDecodePayload = (encodedStr: string): DecodedPayload | null => {
@@ -424,7 +426,8 @@ function Skrining() {
 
   // Questionnaire States
   const [questions, setQuestions] = useState<ScreeningQuestion[]>([]);
-  const [jawaban, setJawaban] = useState<Record<string, number>>({});
+  const [tcmSections, setTcmSections] = useState<TcmQuestionSection[]>(TCM_SECTIONS);
+  const [jawaban, setJawaban] = useState<Record<string, string | number>>({});
   const [loading, setLoading] = useState(true);
   const [submitted, setSubmitted] = useState(false);
   const [step, setStep] = useState<"questions" | "detail" | "result">("questions");
@@ -442,13 +445,26 @@ function Skrining() {
   const fetchQuestions = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/screening/questions");
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      if (data && data.length > 0) {
-        setQuestions(data);
+      const [resQ, resSec] = await Promise.all([
+        fetch("/api/screening/questions"),
+        fetch("/api/screening/sections"),
+      ]);
+      if (resQ.ok) {
+        const data = await resQ.json();
+        if (data && data.length > 0) {
+          setQuestions(data);
+        } else {
+          setQuestions(defaultQuestions);
+        }
       } else {
         setQuestions(defaultQuestions);
+      }
+
+      if (resSec.ok) {
+        const secData = await resSec.json();
+        if (Array.isArray(secData) && secData.length > 0) {
+          setTcmSections(secData);
+        }
       }
     } catch {
       setQuestions(defaultQuestions);
@@ -715,19 +731,27 @@ function Skrining() {
   // TCM Calculations Engine
   // Generates real percentages and reports based on client answers
   const calculateTcmResult = () => {
-    const totalQuestions = questions.length || 1;
-    const answeredCount = Object.keys(jawaban).length;
+    const totalFieldsCount =
+      tcmSections.reduce((acc, s) => acc + (s.fields?.length || 0), 0) || questions.length || 1;
+    const answeredCount = Object.keys(jawaban).length || 1;
 
-    // Map answer indices to calculate imbalance indices
-    // Calculates average response weights
+    // Calculate sum of response weights safely for both numbers and text
     let totalScoreSum = 0;
     Object.values(jawaban).forEach((v) => {
-      totalScoreSum += v;
+      if (typeof v === "number") {
+        totalScoreSum += v;
+      } else if (typeof v === "string") {
+        const num = parseFloat(v);
+        if (!isNaN(num)) {
+          totalScoreSum += Math.min(3, Math.max(0, num / 3.33));
+        } else if (v.trim().length > 0) {
+          totalScoreSum += 1.5;
+        }
+      }
     });
 
-    const maxPossibleScore = totalQuestions * 3;
     const answeredMaxScore = answeredCount * 3 || 1;
-    const severityRatio = totalScoreSum / answeredMaxScore;
+    const severityRatio = Math.max(0, Math.min(1, totalScoreSum / answeredMaxScore));
 
     // Calculate dynamic balance score (high severity = low balance)
     const balanceScore = Math.max(0, Math.min(100, Math.round(100 - severityRatio * 100)));
@@ -912,23 +936,39 @@ function Skrining() {
   }, [step, aiReport, isLoadingReport, jawaban, requestAiAnalysis]);
 
   const getSyndromeConfidence = (syndrome: { title: string; keywords: string[] }) => {
-    const totalQuestions = questions.length || 1;
     const answeredCount = Object.keys(jawaban).length || 1;
     let totalScoreSum = 0;
     Object.values(jawaban).forEach((v) => {
-      totalScoreSum += v;
+      if (typeof v === "number") {
+        totalScoreSum += v;
+      } else if (typeof v === "string") {
+        const num = parseFloat(v);
+        if (!isNaN(num)) {
+          totalScoreSum += Math.min(3, Math.max(0, num / 3.33));
+        } else if (v.trim().length > 0) {
+          totalScoreSum += 1.5;
+        }
+      }
     });
     const answeredMaxScore = answeredCount * 3 || 1;
-    const severityRatio = totalScoreSum / answeredMaxScore;
+    const severityRatio = Math.max(0, Math.min(1, totalScoreSum / answeredMaxScore));
 
     // Base confidence is proportional to severityRatio
     const score = severityRatio * 70 + 30; // 30% to 100%
 
-    // Check specific question answers (1, 2, or 3)
-    const q8 = jawaban["dq8"] || 0; // Edema, Limpa-Ginjal, Lembap
-    const q9 = jawaban["dq9"] || 0; // Globus, Hati
-    const q10 = jawaban["dq10"] || 0; // BAB Lengket, Lembap, Dahak, Limpa
-    const q1 = jawaban["dq1"] || 0; // Lelah, Qi Deficiency
+    // Check specific question answers or complaints
+    const checkAns = (key: string): number => {
+      const v = jawaban[key];
+      if (typeof v === "number") return v;
+      if (typeof v === "string" && v.trim().length > 0) return 2;
+      return 0;
+    };
+
+    const q8 = checkAns("f7_edema_bengkak") || checkAns("dq8");
+    const q9 = checkAns("f2_tenggorokan_mengganjal") || checkAns("dq9");
+    const q10 = checkAns("f5_karakter_bab") || checkAns("dq10");
+    const q1 =
+      checkAns("b1_keluhan_mengganggu") || checkAns("g1_tingkat_energi") || checkAns("dq1");
 
     let boost = 0;
 
@@ -1272,7 +1312,9 @@ function Skrining() {
         originalSrcs.forEach(({ img, src }) => {
           img.src = src;
         });
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       toast.error(
         "Gagal mengunduh PDF secara langsung. Silakan coba cetak halaman ini (Ctrl+P) sebagai alternatif.",
         { id: toastId, duration: 5000 },
@@ -1388,91 +1430,34 @@ function Skrining() {
           </div>
         </div>
       </header>
-      {/* STEP 1: SCREENING QUESTIONS FORM (PILIHAN GANDA) */}
+      {/* STEP 1: SCREENING QUESTIONS FORM (FORM INPUT) */}
       {step === "questions" && (
-        <main className="no-print mx-auto max-w-3xl px-4 py-8 sm:py-12">
-          <div className="mb-6 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
-                Langkah 1 dari 2
-              </span>
-              <span className="text-xs font-semibold text-neutral-500">Kuesioner Gejala TCM</span>
-            </div>
-            <span className="text-xs font-semibold text-neutral-600 bg-white border px-3 py-1 rounded-full shadow-2xs">
-              {Object.keys(jawaban).length} dari {questions.length} Soal Dijawab
-            </span>
-          </div>
-
-          <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm sm:p-8">
-            <h1 className="font-display text-2xl font-bold text-neutral-900">
-              1. Pengisian Soal Skrining Mandiri
-            </h1>
-            <p className="mt-1 text-sm text-neutral-500 leading-relaxed">
-              Jawablah pertanyaan-pertanyaan berikut berdasarkan kondisi tubuh yang Anda rasakan
-              akhir-akhir ini.
-            </p>
-
-            {loading ? (
-              <div className="py-12 text-center text-sm text-neutral-500 flex items-center justify-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                Memuat soal skrining...
-              </div>
-            ) : (
-              <div className="mt-8 space-y-6">
-                {questions.map((q, idx) => (
-                  <div
-                    key={q.id}
-                    className="rounded-xl border border-neutral-100 bg-neutral-50/50 p-5 hover:border-neutral-200 transition-colors"
-                  >
-                    <p className="text-sm font-medium text-neutral-900 leading-relaxed">
-                      {idx + 1}. {q.questionText}
-                    </p>
-                    <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3">
-                      {[
-                        ["Tidak pernah", 0],
-                        ["Kadang", 1],
-                        ["Sering", 2],
-                        ["Selalu", 3],
-                      ].map(([label, score]) => {
-                        const isSelected = jawaban[q.id] === score;
-                        return (
-                          <button
-                            key={label as string}
-                            type="button"
-                            onClick={() =>
-                              setJawaban((prev) => ({ ...prev, [q.id]: score as number }))
-                            }
-                            className={`rounded-full px-4 py-2 text-xs font-medium transition-all ${
-                              isSelected
-                                ? "bg-primary text-white shadow-xs"
-                                : "border border-neutral-300 bg-white text-neutral-600 hover:border-primary hover:text-primary"
-                            }`}
-                          >
-                            {label as string}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-
-                <div className="mt-10 flex flex-col sm:flex-row items-center justify-between border-t pt-6 gap-4">
-                  <span className="text-xs text-neutral-500 italic">
-                    *Harap jawab semua pertanyaan untuk melanjutkan ke tahap upload foto/video lidah
-                  </span>
-                  <button
-                    type="button"
-                    disabled={Object.keys(jawaban).length < questions.length}
-                    onClick={() => setStep("detail")}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-full bg-primary px-8 py-3.5 text-sm font-semibold text-white transition-all hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Lanjut: Upload Foto/Video Lidah & Keterangan Rinci
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+        <main className="no-print mx-auto max-w-4xl px-4 py-8 sm:py-12">
+          <TcmQuestionnaireForm
+            answers={jawaban as Record<string, string>}
+            onChange={(nextAnswers) => setJawaban(nextAnswers)}
+            customSections={tcmSections}
+            onComplete={() => {
+              if (!keluhan || keluhan === "Sering merasa letih, perut kembung, dan badan dingin.") {
+                const compParts = [
+                  jawaban["b1_keluhan_utama"],
+                  jawaban["c1_lokasi_keluhan"],
+                  jawaban["b6_bagian_tubuh"],
+                ].filter(Boolean);
+                if (compParts.length > 0) {
+                  setKeluhan(compParts.join(" - "));
+                }
+              }
+              setStep("detail");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            patientProfile={{
+              fullName: nama || profile?.fullName || user?.name,
+              age: usia || (profile?.age ? String(profile.age) : undefined),
+              gender: kelamin === "L" ? "Laki-laki" : "Perempuan",
+              phone: recipientPhone || profile?.phone,
+            }}
+          />
         </main>
       )}
       {/* STEP 2: UPLOAD PHOTO/VIDEO LIDAH & KETERANGAN LEBIH RINCI */}
@@ -2017,37 +2002,51 @@ function Skrining() {
 
             {/* HASIL PENILAIAN SKRENING & RIWAYAT PENGISIAN SOAL */}
             {(() => {
-              const totalScore = Object.values(jawaban).reduce((acc, val) => acc + (val || 0), 0);
-              const maxPossibleScore = (questions.length || 1) * 3;
-              const pct = maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : 0;
+              const answeredCount = Object.keys(jawaban).length;
+              const totalFieldsCount =
+                tcmSections.reduce((acc, s) => acc + (s.fields?.length || 0), 0) ||
+                questions.length ||
+                1;
+
+              const hasSectionAnswers = tcmSections.some((sec) =>
+                sec.fields?.some((f) => Boolean(jawaban[f.id])),
+              );
+
+              // Calculate overall condition level based on answered questions
+              let severityPoints = 0;
+              Object.values(jawaban).forEach((v) => {
+                if (typeof v === "number") {
+                  severityPoints += v;
+                } else if (typeof v === "string" && v.trim().length > 0) {
+                  const n = parseFloat(v);
+                  if (!isNaN(n)) severityPoints += Math.min(3, n / 3.33);
+                  else severityPoints += 1.5;
+                }
+              });
+              const maxPts = Math.max(1, answeredCount * 3);
+              const ratio = Math.min(1, severityPoints / maxPts);
+
               const riskInfo =
-                pct < 30
+                ratio < 0.35
                   ? {
-                      level: "Rendah",
+                      level: "Ringan / Seimbang",
                       badgeClass: "bg-emerald-100 text-emerald-800 border-emerald-300",
                       advice:
                         "Kondisi vitalitas tubuh Anda secara umum berada dalam keseimbangan yang baik. Tetap pertahankan pola hidup sehat dan pola makan seimbang.",
                     }
-                  : pct < 65
+                  : ratio < 0.7
                     ? {
-                        level: "Sedang",
+                        level: "Ketidakseimbangan Sedang",
                         badgeClass: "bg-amber-100 text-amber-800 border-amber-300",
                         advice:
-                          "Terdapat beberapa indikasi ketidakseimbangan energi/qi. Disarankan melakukan konsultasi awal untuk menentukan terapi pendukung yang tepat.",
+                          "Terdapat beberapa indikasi ketidakseimbangan energi (Qi/Darah/Yin-Yang). Disarankan melakukan konsultasi dan terapi pendukung yang tepat.",
                       }
                     : {
-                        level: "Tinggi",
+                        level: "Ketidakseimbangan Dominan",
                         badgeClass: "bg-rose-100 text-rose-800 border-rose-300",
                         advice:
-                          "Banyak tanda ketidakseimbangan signifikan terdeteksi. Kami menyarankan Anda menjadwalkan konsultasi mendalam dengan praktisi kami agar dapat ditangani secara dini.",
+                          "Banyak tanda ketidakseimbangan signifikan terdeteksi. Kami menyarankan Anda menjadwalkan konsultasi mendalam dengan praktisi kami di Rumah Terapy Ikhtiar Sehat.",
                       };
-
-              const historyPerPage = 5;
-              const totalHistoryPages = Math.ceil((questions.length || 1) / historyPerPage) || 1;
-              const paginatedHistoryQuestions = questions.slice(
-                (historyQuestionsPage - 1) * historyPerPage,
-                historyQuestionsPage * historyPerPage,
-              );
 
               return (
                 <div className="mt-8 rounded-2xl border border-neutral-200 bg-white p-6 shadow-xs sm:p-8">
@@ -2058,19 +2057,20 @@ function Skrining() {
                         className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-bold border ${riskInfo.badgeClass}`}
                       >
                         <AlertCircle className="h-3.5 w-3.5" />
-                        Tingkat Risiko: {riskInfo.level}
+                        Status Vitalitas: {riskInfo.level}
                       </span>
                     </div>
                     <h3 className="font-display text-xl font-bold text-neutral-900 sm:text-2xl">
-                      Hasil Penilaian Skrening Mandiri Berhasil Disimpan
+                      Hasil Anamnesis Skrining Mandiri Berhasil Disimpan
                     </h3>
                     <p className="mx-auto max-w-xl text-xs sm:text-sm text-neutral-600 leading-relaxed font-medium">
                       {riskInfo.advice}
                     </p>
                     <div className="inline-flex items-center gap-2 rounded-lg bg-neutral-50 px-4 py-2 text-xs font-semibold text-neutral-700 border border-neutral-200">
                       <span>
-                        Total Skor: <strong className="text-primary text-sm">{totalScore}</strong>{" "}
-                        dari maksimum <strong>{maxPossibleScore}</strong> ({questions.length} soal)
+                        Total Pertanyaan Terisi:{" "}
+                        <strong className="text-primary text-sm">{answeredCount}</strong> dari{" "}
+                        <strong>{totalFieldsCount}</strong> parameter anamnesis
                       </span>
                     </div>
                   </div>
@@ -2081,160 +2081,138 @@ function Skrining() {
                       <div>
                         <h4 className="font-display text-base font-bold text-neutral-900 flex items-center gap-2">
                           <FileText className="h-4 w-4 text-primary" />
-                          Riwayat Pengisian & Detail Jawaban Kuesioner
+                          Riwayat Isian &amp; Jawaban Pasien (Bagian A – L)
                         </h4>
                         <p className="text-xs text-neutral-500 mt-0.5">
-                          Rincian setiap pertanyaan yang dijawab oleh pasien beserta pilihan bobot
-                          skornya:
+                          Rincian seluruh pertanyaan skrining yang diisi oleh pasien:
                         </p>
                       </div>
-                      <span className="text-xs font-semibold text-neutral-500 bg-neutral-100 px-2.5 py-1 rounded-full self-start sm:self-auto">
-                        {Object.keys(jawaban).length} dari {questions.length} Soal Terisi
+                      <span className="text-xs font-semibold text-neutral-600 bg-neutral-100 px-3 py-1 rounded-full self-start sm:self-auto border border-neutral-200">
+                        {answeredCount} Jawaban Tersimpan
                       </span>
                     </div>
 
-                    {/* Question Items (Interactive Paginated for Screen) */}
-                    <div className="space-y-3 pt-2 no-print">
-                      {paginatedHistoryQuestions.map((q, idx) => {
-                        const globalIdx = (historyQuestionsPage - 1) * historyPerPage + idx;
-                        const answerVal = jawaban[q.id];
-                        const answerOptions = [
-                          { label: "Tidak pernah", score: 0 },
-                          { label: "Kadang-kadang", score: 1 },
-                          { label: "Sering", score: 2 },
-                          { label: "Selalu", score: 3 },
-                        ];
-                        return (
-                          <div
-                            key={q.id}
-                            className="rounded-xl border border-neutral-200 bg-neutral-50/50 p-4 transition-all hover:bg-neutral-50"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="space-y-1 flex-1">
+                    {/* Section-grouped breakdown */}
+                    {hasSectionAnswers ? (
+                      <div className="space-y-6 pt-2">
+                        {tcmSections.map((sec) => {
+                          const answeredInSec = sec.fields.filter(
+                            (f) =>
+                              jawaban[f.id] !== undefined &&
+                              jawaban[f.id] !== null &&
+                              String(jawaban[f.id]).trim() !== "",
+                          );
+                          if (answeredInSec.length === 0) return null;
+
+                          return (
+                            <div
+                              key={sec.code}
+                              className="rounded-xl border border-neutral-200/90 bg-neutral-50/40 p-4 sm:p-5 print:bg-transparent print:p-2"
+                            >
+                              <div className="flex items-center gap-2 pb-3 border-b border-neutral-200/70">
+                                <span className="inline-flex items-center justify-center h-6 w-6 rounded-md bg-primary text-white text-xs font-bold font-mono">
+                                  {sec.code}
+                                </span>
+                                <h5 className="font-display text-sm sm:text-base font-bold text-neutral-900">
+                                  {sec.title}
+                                </h5>
+                                <span className="ml-auto text-[11px] text-neutral-500 font-medium no-print">
+                                  {answeredInSec.length} dari {sec.fields.length} terisi
+                                </span>
+                              </div>
+
+                              <div className="mt-3 divide-y divide-neutral-200/60">
+                                {sec.fields.map((field) => {
+                                  const val = jawaban[field.id];
+                                  const isFilled =
+                                    val !== undefined && val !== null && String(val).trim() !== "";
+
+                                  return (
+                                    <div
+                                      key={field.id}
+                                      className={`py-2.5 flex flex-col sm:flex-row sm:items-start justify-between gap-2 text-xs sm:text-sm ${
+                                        !isFilled ? "opacity-40 no-print" : ""
+                                      }`}
+                                    >
+                                      <div className="sm:w-1/2 pr-2">
+                                        <span className="text-neutral-500 font-mono font-bold mr-1.5">
+                                          {sec.code}
+                                          {field.number}.
+                                        </span>
+                                        <span className="text-neutral-800 font-medium">
+                                          {field.label}
+                                        </span>
+                                      </div>
+                                      <div className="sm:w-1/2">
+                                        {isFilled ? (
+                                          <div className="inline-block rounded-lg bg-white border border-neutral-300 px-3 py-1.5 font-semibold text-neutral-900 shadow-2xs">
+                                            {field.type === "scale" ? (
+                                              <span className="text-primary font-bold">
+                                                Skala: {val} / 10
+                                              </span>
+                                            ) : (
+                                              String(val)
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <span className="text-neutral-400 italic text-xs">
+                                            -(Tidak ada keluhan / belum diisi)-
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      /* Fallback for legacy 10-questions */
+                      <div className="space-y-3 pt-2">
+                        {questions.map((q, qIdx) => {
+                          const val = jawaban[q.id];
+                          const answerOptions = [
+                            { label: "Tidak pernah", score: 0 },
+                            { label: "Kadang-kadang", score: 1 },
+                            { label: "Sering", score: 2 },
+                            { label: "Selalu", score: 3 },
+                          ];
+                          return (
+                            <div
+                              key={q.id}
+                              className="rounded-xl border border-neutral-200 bg-neutral-50/50 p-4 transition-all"
+                            >
+                              <div className="space-y-1">
                                 <span className="inline-block rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
-                                  Soal #{globalIdx + 1}
+                                  Soal #{qIdx + 1}
                                 </span>
                                 <p className="text-xs sm:text-sm font-semibold text-neutral-800 leading-snug">
                                   {q.questionText}
                                 </p>
                               </div>
+                              <div className="mt-3 flex flex-wrap gap-1.5">
+                                {answerOptions.map((opt) => {
+                                  const isSelected = val === opt.score;
+                                  return (
+                                    <span
+                                      key={opt.score}
+                                      className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-medium ${
+                                        isSelected
+                                          ? "bg-primary text-white font-bold"
+                                          : "bg-white text-neutral-400 border border-neutral-200 opacity-60"
+                                      }`}
+                                    >
+                                      {isSelected && <CheckCircle className="h-3 w-3" />}
+                                      <span>{opt.label}</span>
+                                    </span>
+                                  );
+                                })}
+                              </div>
                             </div>
-                            <div className="mt-3 grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap">
-                              {answerOptions.map((opt) => {
-                                const isSelected = answerVal === opt.score;
-                                return (
-                                  <span
-                                    key={opt.score}
-                                    className={`inline-flex items-center justify-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-all ${
-                                      isSelected
-                                        ? "bg-primary text-white font-bold shadow-xs border border-primary"
-                                        : "bg-white text-neutral-400 border border-neutral-200 opacity-60"
-                                    }`}
-                                  >
-                                    {isSelected && <CheckCircle className="h-3 w-3" />}
-                                    <span>{opt.label}</span>
-                                    <span className="text-[9px] opacity-80">({opt.score} pt)</span>
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Full Question Breakdown (For Clean PDF / Print Export) */}
-                    <div className="hidden print:block print-avoid-break mt-4">
-                      <table className="w-full border-collapse text-left text-[10pt]">
-                        <thead>
-                          <tr className="border-b-2 border-neutral-300 bg-neutral-100/70">
-                            <th className="py-2 px-3 font-bold text-neutral-800 w-12 text-center">
-                              No
-                            </th>
-                            <th className="py-2 px-3 font-bold text-neutral-800">
-                              Pertanyaan Skrening
-                            </th>
-                            <th className="py-2 px-3 font-bold text-neutral-800 w-44 text-center">
-                              Respon Pasien
-                            </th>
-                            <th className="py-2 px-3 font-bold text-neutral-800 w-16 text-center">
-                              Skor
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-neutral-200">
-                          {questions.map((q, qIdx) => {
-                            const val = jawaban[q.id] ?? 0;
-                            const label =
-                              val === 0
-                                ? "Tidak pernah"
-                                : val === 1
-                                  ? "Kadang-kadang"
-                                  : val === 2
-                                    ? "Sering"
-                                    : "Selalu";
-                            return (
-                              <tr key={q.id} className={qIdx % 2 === 1 ? "bg-neutral-50/50" : ""}>
-                                <td className="py-1.5 px-3 font-mono text-center font-bold text-neutral-500">
-                                  {qIdx + 1}
-                                </td>
-                                <td className="py-1.5 px-3 text-neutral-800 font-medium leading-tight">
-                                  {q.questionText}
-                                </td>
-                                <td className="py-1.5 px-3 text-center">
-                                  <span className="inline-block px-2 py-0.5 rounded font-semibold text-[9pt] border border-neutral-300">
-                                    {label}
-                                  </span>
-                                </td>
-                                <td className="py-1.5 px-3 text-center font-bold text-primary">
-                                  {val}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Pagination Controls */}
-                    {questions.length > historyPerPage && (
-                      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-neutral-200 pt-4 text-xs text-neutral-500 no-print">
-                        <div>
-                          Menampilkan soal{" "}
-                          <strong className="text-neutral-900">
-                            {(historyQuestionsPage - 1) * historyPerPage + 1}
-                          </strong>{" "}
-                          -{" "}
-                          <strong className="text-neutral-900">
-                            {Math.min(historyQuestionsPage * historyPerPage, questions.length)}
-                          </strong>{" "}
-                          dari <strong className="text-neutral-900">{questions.length}</strong> soal
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setHistoryQuestionsPage((p) => Math.max(1, p - 1))}
-                            disabled={historyQuestionsPage <= 1}
-                            className="flex items-center gap-1 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                          >
-                            <ChevronLeft className="h-3.5 w-3.5" />
-                            Sebelumnya
-                          </button>
-                          <span className="px-2 font-bold text-neutral-800">
-                            {historyQuestionsPage} / {totalHistoryPages}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setHistoryQuestionsPage((p) => Math.min(totalHistoryPages, p + 1))
-                            }
-                            disabled={historyQuestionsPage >= totalHistoryPages}
-                            className="flex items-center gap-1 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                          >
-                            Selanjutnya
-                            <ChevronRight className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
