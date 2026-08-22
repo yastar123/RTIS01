@@ -23,7 +23,7 @@ import {
   Crosshair,
   Printer,
 } from "lucide-react";
-import { calculateTcmResult, getDominantConstitution, createTcmReportHelpers } from "@/lib/tcm";
+import { calculateTcmResult, getDominantConstitution, createTcmScreeningReportHelpers } from "@/lib/tcm";
 
 export interface HerbalIndonesiaItem {
   namaIndonesia: string;
@@ -72,7 +72,7 @@ export interface TitikPijatItem {
   manfaatUtama: string;
 }
 
-export interface TcmAiReport {
+export interface TcmScreeningReport {
   kesimpulanHolistik: {
     statusVitalitas: string;
     ringkasanAnalisa: string;
@@ -119,13 +119,12 @@ export interface TcmAiReport {
   herbalIndonesia: HerbalIndonesiaItem[];
   herbalChina: HerbalChinaItem[];
   faktorPencetus: string[];
-  isAiGenerated: boolean;
 }
 
 interface TcmHerbalReportProps {
-  report: TcmAiReport | null;
-  isLoadingAi?: boolean;
-  onRefreshAi?: () => void;
+  report: TcmScreeningReport | null;
+  isLoadingReport?: boolean;
+  onRefreshReport?: () => void;
   results?: {
     balanceScore: number;
     imbalEnergy: number;
@@ -167,8 +166,8 @@ interface TcmHerbalReportProps {
 
 export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
   report,
-  isLoadingAi = false,
-  onRefreshAi,
+  isLoadingReport = false,
+  onRefreshReport,
   results: propResults,
   dominant: propDominant,
   answers = {},
@@ -185,7 +184,7 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
 }) => {
   const computedResults = propResults || calculateTcmResult(answers, 24);
   const computedDominant = propDominant || getDominantConstitution(computedResults);
-  const helpers = createTcmReportHelpers(answers, computedResults, keluhan);
+  const helpers = createTcmScreeningReportHelpers(answers, computedResults, keluhan);
 
   const results = computedResults;
   const dominant = computedDominant;
@@ -207,41 +206,36 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
 
   return (
     <div id="tcm-herbal-report-root" className="space-y-8">
-      {/* AI STATUS & RE-ANALYSIS BANNER */}
+      {/* STATUS & RE-ANALYSIS BANNER */}
       <div className="rounded-xl border border-primary/20 bg-gradient-to-r from-primary/10 via-amber-500/5 to-transparent p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-white shadow-xs">
-            <Sparkles className={`h-5 w-5 ${isLoadingAi ? "animate-spin" : ""}`} />
+            <Sparkles className={`h-5 w-5 ${isLoadingReport ? "animate-spin" : ""}`} />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h4 className="font-display text-sm sm:text-base font-bold text-neutral-900">
-                Analisis Holistik OpenRouter AI &amp; Panduan Herbal TCM
+                Analisis Holistik &amp; Panduan Herbal TCM
               </h4>
-              {report?.isAiGenerated && (
-                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                  OpenRouter AI Active
-                </span>
-              )}
             </div>
             <p className="text-xs text-neutral-600">
-              {isLoadingAi
-                ? "Menghubungkan ke OpenRouter AI untuk menganalisa sindrom & meracik formula herbal..."
+              {isLoadingReport
+                ? "Menganalisa sindrom & meracik formula herbal yang dipersonalisasi..."
                 : "Hasil skrining dipadukan dengan formula herbal Indonesia & Tradisional China yang dipersonalisasi."}
             </p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 no-print shrink-0">
-          {onRefreshAi && (
+          {onRefreshReport && (
             <button
               type="button"
-              onClick={onRefreshAi}
-              disabled={isLoadingAi}
+              onClick={onRefreshReport}
+              disabled={isLoadingReport}
               className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 shadow-2xs transition-all disabled:opacity-50"
             >
-              <RotateCcw className={`h-3.5 w-3.5 ${isLoadingAi ? "animate-spin" : ""}`} />
-              {isLoadingAi ? "Menganalisis..." : "Perbarui Analisa AI"}
+              <RotateCcw className={`h-3.5 w-3.5 ${isLoadingReport ? "animate-spin" : ""}`} />
+              {isLoadingReport ? "Menganalisis..." : "Perbarui Analisa"}
             </button>
           )}
           <button
@@ -788,14 +782,13 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
                   Rekomendasi Titik Akupunktur &amp; Meridian Terapi
                 </h3>
                 <p className="text-xs text-teal-800">
-                  Diproses secara otomatis oleh AI berdasarkan analisis kuesioner (Langkah 1) serta
-                  keluhan &amp; foto lidah (Langkah 2).
+                  Diproses berdasarkan analisis kuesioner (Langkah 1) serta keluhan &amp; foto lidah (Langkah 2).
                 </p>
               </div>
             </div>
             <span className="self-start sm:self-center shrink-0 rounded-full bg-teal-100 px-3 py-1 text-[11px] font-bold text-teal-900 border border-teal-300 flex items-center gap-1.5">
               <Sparkles className="h-3.5 w-3.5 text-teal-700" />
-              Acupuncture AI Prescription (Khusus Admin)
+              Acupuncture Prescription (Khusus Admin)
             </span>
           </div>
 
@@ -960,7 +953,7 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
             </div>
             <span className="self-start sm:self-center shrink-0 rounded-full bg-violet-100 px-3 py-1 text-[11px] font-bold text-violet-900 border border-violet-300 flex items-center gap-1.5">
               <Sparkles className="h-3.5 w-3.5 text-violet-700" />
-              Bekam AI Prescription (Khusus Admin)
+              Bekam Prescription (Khusus Admin)
             </span>
           </div>
 

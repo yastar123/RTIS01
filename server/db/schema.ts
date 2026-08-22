@@ -88,6 +88,16 @@ export const cmsContent = pgTable("cms_content", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const tutorials = pgTable("tutorials", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  mediaUrl: text("media_url"),
+  mediaType: text("media_type"), // 'image' or 'video'
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const screeningResults = pgTable("screening_results", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id")

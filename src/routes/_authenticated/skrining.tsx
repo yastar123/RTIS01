@@ -32,7 +32,7 @@ import {
   Loader2,
   Video,
 } from "lucide-react";
-import { TcmHerbalReport, TcmAiReport } from "@/components/screening/TcmHerbalReport";
+import { TcmHerbalReport, TcmScreeningReport } from "@/components/screening/TcmHerbalReport";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/skrining")({
@@ -431,9 +431,9 @@ function Skrining() {
   const [mediaType, setMediaType] = useState<"image" | "video">("image");
   const [historyQuestionsPage, setHistoryQuestionsPage] = useState(1);
 
-  // AI Generated TCM & Herbal State
-  const [aiReport, setAiReport] = useState<TcmAiReport | null>(null);
-  const [isLoadingAi, setIsLoadingAi] = useState(false);
+  // Generated TCM & Herbal State
+  const [aiReport, setAiReport] = useState<TcmScreeningReport | null>(null);
+  const [isLoadingReport, setIsLoadingAi] = useState(false);
 
   // Shared Screening States
   const [isViewingShared, setIsViewingShared] = useState(false);
@@ -646,6 +646,10 @@ function Skrining() {
   const handleGalleryUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 50 * 1024 * 1024) {
+        toast.error("File terlalu besar. Maksimal 50 MB.");
+        return;
+      }
       const isVid = file.type.startsWith("video/");
       setMediaType(isVid ? "video" : "image");
       const reader = new FileReader();
@@ -665,6 +669,11 @@ function Skrining() {
     let processedCount = 0;
 
     fileArray.forEach((file) => {
+      if (file.size > 50 * 1024 * 1024) {
+        toast.error(`File ${file.name} terlalu besar. Maksimal 50 MB.`);
+        processedCount++;
+        return;
+      }
       const sizeKB = (file.size / 1024).toFixed(0);
       const formattedSize =
         file.size > 1024 * 1024 ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : `${sizeKB} KB`;
@@ -887,7 +896,7 @@ function Skrining() {
           setAiReport(data);
         }
       } catch (err) {
-        console.error("Gagal mendapatkan analisa AI:", err);
+        console.error("Gagal mendapatkan analisa:", err);
       } finally {
         setIsLoadingAi(false);
       }
@@ -897,10 +906,10 @@ function Skrining() {
 
   // Auto trigger AI analysis when reaching result step
   useEffect(() => {
-    if (step === "result" && !aiReport && !isLoadingAi && Object.keys(jawaban).length > 0) {
+    if (step === "result" && !aiReport && !isLoadingReport && Object.keys(jawaban).length > 0) {
       void requestAiAnalysis();
     }
-  }, [step, aiReport, isLoadingAi, jawaban, requestAiAnalysis]);
+  }, [step, aiReport, isLoadingReport, jawaban, requestAiAnalysis]);
 
   const getSyndromeConfidence = (syndrome: { title: string; keywords: string[] }) => {
     const totalQuestions = questions.length || 1;
@@ -2236,8 +2245,8 @@ function Skrining() {
             {/* AI-POWERED TCM & HERBAL REPORT (INDONESIA & CHINA) */}
             <TcmHerbalReport
               report={aiReport}
-              isLoadingAi={isLoadingAi}
-              onRefreshAi={() => requestAiAnalysis()}
+              isLoadingReport={isLoadingReport}
+              onRefreshReport={() => requestAiAnalysis()}
               results={results}
               dominant={dominant}
               isAdmin={user?.role === "admin"}

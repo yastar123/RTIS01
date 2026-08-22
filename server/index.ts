@@ -17,11 +17,12 @@ import {
   services,
   sessions,
   users,
+  tutorials,
 } from "./db/schema";
 import { generateOpenRouterTcmAnalysis } from "./geminiTcm";
 
 const app = express();
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "50mb" }));
 
 function sessionUser(req: express.Request) {
   const token = req.headers.authorization?.replace("Bearer ", "");
@@ -1626,6 +1627,43 @@ async function ensurePatientAccount() {
     console.error("[AI Studio] Gagal menyiapkan akun demo pasien:", err);
   }
 }
+
+// Tutorial endpoints
+app.get("/api/tutorials", async (_req, res) => {
+  const db = getDb();
+  const data = await db.select().from(tutorials).orderBy(desc(tutorials.createdAt));
+  res.json(data);
+});
+
+app.post("/api/admin/tutorials", async (req, res) => {
+  if (!(await requireAdmin(req, res))) return;
+  const { title, description, mediaUrl, mediaType } = req.body;
+  const db = getDb();
+  const [data] = await db
+    .insert(tutorials)
+    .values({ title, description, mediaUrl, mediaType })
+    .returning();
+  res.json(data);
+});
+
+app.patch("/api/admin/tutorials/:id", async (req, res) => {
+  if (!(await requireAdmin(req, res))) return;
+  const { title, description, mediaUrl, mediaType } = req.body;
+  const db = getDb();
+  const [data] = await db
+    .update(tutorials)
+    .set({ title, description, mediaUrl, mediaType, updatedAt: new Date() })
+    .where(eq(tutorials.id, req.params.id))
+    .returning();
+  res.json(data);
+});
+
+app.delete("/api/admin/tutorials/:id", async (req, res) => {
+  if (!(await requireAdmin(req, res))) return;
+  const db = getDb();
+  await db.delete(tutorials).where(eq(tutorials.id, req.params.id));
+  res.json({ message: "Tutorial dihapus." });
+});
 
 async function start() {
   await ensureAdminAccount();

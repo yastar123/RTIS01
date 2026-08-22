@@ -35,9 +35,10 @@ import {
   CheckCircle2,
   AlertTriangle,
   Printer,
+  PlayCircle,
 } from "lucide-react";
 import { useAuth, authHeaders } from "@/hooks/use-auth";
-import { TcmHerbalReport, type TcmAiReport } from "@/components/screening/TcmHerbalReport";
+import { TcmHerbalReport, type TcmScreeningReport } from "@/components/screening/TcmHerbalReport";
 import { calculateTcmResult } from "@/lib/tcm";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -291,6 +292,7 @@ function AdminPage() {
     { key: "reservations", label: "Reservasi Pasien", icon: CalendarDays },
     { key: "screening", label: "Hasil Skrining", icon: Stethoscope },
     { key: "articles", label: "Artikel Health", icon: FileText },
+    { key: "tutorials", label: "Tutorials", icon: PlayCircle },
     { key: "users", label: "Manajemen User", icon: Users },
   ];
 
@@ -574,6 +576,11 @@ function AdminPage() {
                   onCreate={() => setArticleDialog("new")}
                   onEdit={setArticleDialog}
                   onDelete={removeArticle}
+                />
+              )}
+              {section === "tutorials" && (
+                <TutorialSection
+                  onNavigate={setSection}
                 />
               )}
               {section === "users" && (
@@ -1968,7 +1975,7 @@ function ScreeningSection({
                               className="h-7 text-[11px] gap-1 px-2.5 bg-teal-700 hover:bg-teal-800 text-white"
                             >
                               <Eye className="h-3.5 w-3.5" />
-                              <span className="hidden sm:inline">Laporan AI</span>
+                              <span className="hidden sm:inline">Laporan Analisis</span>
                             </Button>
 
                             {item.phone && (
@@ -2019,7 +2026,7 @@ function ScreeningDetailModal({
   item: AdminScreeningItem;
   onClose: () => void;
 }) {
-  const [aiReport, setAiReport] = useState<TcmAiReport | null>(() => {
+  const [aiReport, setAiReport] = useState<TcmScreeningReport | null>(() => {
     if (item.aiReport) {
       try {
         const parsed =
@@ -2031,7 +2038,7 @@ function ScreeningDetailModal({
     }
     return null;
   });
-  const [isLoadingAi, setIsLoadingAi] = useState(false);
+  const [isLoadingReport, setIsLoadingAi] = useState(false);
   const [aiError, setAiError] = useState("");
 
   let parsedAnswers: Record<string, number> = {};
@@ -2206,29 +2213,29 @@ function ScreeningDetailModal({
             <div className="flex items-center justify-between">
               <h4 className="font-bold text-sm text-foreground flex items-center gap-1.5">
                 <Sparkles className="h-4 w-4 text-amber-500" />
-                Laporan Analisis Holistik AI TCM
+                Laporan Analisis Holistik TCM
               </h4>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => void generateReport()}
-                disabled={isLoadingAi}
+                disabled={isLoadingReport}
                 className="h-8 text-xs gap-1.5"
               >
-                {isLoadingAi ? (
+                {isLoadingReport ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <RefreshCw className="h-3.5 w-3.5" />
                 )}
-                {aiReport ? "Muat Ulang AI" : "Generate Analisis AI"}
+                {aiReport ? "Muat Ulang" : "Generate Analisis"}
               </Button>
             </div>
 
-            {isLoadingAi ? (
+            {isLoadingReport ? (
               <div className="rounded-xl border p-8 text-center space-y-2 bg-card">
                 <Loader2 className="mx-auto h-8 w-8 animate-spin text-teal-700" />
                 <p className="text-xs text-muted-foreground">
-                  AI sedang menganalisis pola sindrom TCM, formulasi herbal, dan rekomendasi titik
+                  Sistem sedang menganalisis pola sindrom TCM, formulasi herbal, dan rekomendasi titik
                   akupunktur pasien...
                 </p>
               </div>
@@ -2304,6 +2311,163 @@ function ScreeningDetailModal({
             Tutup
           </Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TutorialSection({
+  onNavigate,
+}: {
+  onNavigate: (section: Section) => void;
+}) {
+  const [tutorials, setTutorials] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [dialog, setDialog] = useState<any | "new" | null>(null);
+
+  const loadTutorials = async () => {
+    setIsLoading(true);
+    try {
+      const data = await adminFetch<any[]>("/api/tutorials");
+      setTutorials(data);
+    } catch (e) {
+      toast.error("Gagal memuat tutorial");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadTutorials();
+  }, []);
+
+  const removeTutorial = async (id: string) => {
+    if (!window.confirm("Hapus tutorial ini?")) return;
+    try {
+      await adminFetch(`/api/admin/tutorials/${id}`, { method: "DELETE" });
+      await loadTutorials();
+      toast.success("Tutorial dihapus");
+    } catch (e) {
+      toast.error("Gagal menghapus tutorial");
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle>Kelola Tutorial</CardTitle>
+        <Button onClick={() => setDialog("new")}>
+          <Plus className="h-4 w-4 mr-2" /> Tambah Tutorial
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <p>Memuat...</p>
+        ) : (
+          <>
+            {/* Desktop View Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Judul</TableHead>
+                    <TableHead>Tipe</TableHead>
+                    <TableHead>Aksi</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {tutorials.map((t) => (
+                    <TableRow key={t.id}>
+                      <TableCell className="font-medium">{t.title}</TableCell>
+                      <TableCell className="capitalize">{t.mediaType}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => setDialog(t)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => removeTutorial(t.id)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            
+            {/* Mobile View Card List */}
+            <div className="grid gap-3 md:hidden">
+              {tutorials.map((t) => (
+                <div key={t.id} className="rounded-lg border p-4 space-y-2 bg-card">
+                  <p className="font-semibold">{t.title}</p>
+                  <Badge variant="outline" className="capitalize">{t.mediaType}</Badge>
+                  <div className="flex justify-end gap-2 pt-2 border-t">
+                    <Button variant="ghost" size="sm" onClick={() => setDialog(t)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => removeTutorial(t.id)}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </CardContent>
+      <TutorialDialog value={dialog} onClose={() => setDialog(null)} onSaved={loadTutorials} />
+    </Card>
+  );
+}
+
+function TutorialDialog({
+  value,
+  onClose,
+  onSaved,
+}: {
+  value: any | "new" | null;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const [form, setForm] = useState({ title: "", description: "", mediaUrl: "", mediaType: "image" });
+
+  useEffect(() => {
+    if (value && value !== "new") setForm(value);
+    else setForm({ title: "", description: "", mediaUrl: "", mediaType: "image" });
+  }, [value]);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      await adminFetch(value === "new" ? "/api/admin/tutorials" : `/api/admin/tutorials/${value.id}`, {
+        method: value === "new" ? "POST" : "PATCH",
+        body: JSON.stringify(form),
+      });
+      await onSaved();
+      onClose();
+      toast.success("Tutorial disimpan");
+    } catch (e) {
+      toast.error("Gagal menyimpan tutorial");
+    }
+  };
+
+  return (
+    <Dialog open={!!value} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{value === "new" ? "Tambah Tutorial" : "Edit Tutorial"}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-4">
+          <Input placeholder="Judul" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
+          <Textarea placeholder="Deskripsi" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} required />
+          <Input placeholder="URL Media" value={form.mediaUrl} onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })} />
+          <select value={form.mediaType} onChange={(e) => setForm({ ...form, mediaType: e.target.value })}>
+            <option value="image">Gambar</option>
+            <option value="video">Video</option>
+          </select>
+          <Button type="submit">Simpan</Button>
+        </form>
       </DialogContent>
     </Dialog>
   );

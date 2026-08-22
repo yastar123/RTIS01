@@ -1,4 +1,4 @@
-import { TcmAiReport } from "@/components/screening/TcmHerbalReport";
+import { TcmScreeningReport } from "@/components/screening/TcmHerbalReport";
 
 export function calculateTcmResult(
   jawaban: Record<string, number>,
@@ -143,7 +143,7 @@ export function getDominantConstitution(results: ReturnType<typeof calculateTcmR
   return list[0];
 }
 
-export function createTcmReportHelpers(
+export function createTcmScreeningReportHelpers(
   jawaban: Record<string, number>,
   results: ReturnType<typeof calculateTcmResult>,
   keluhan?: string,

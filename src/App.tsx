@@ -5,6 +5,7 @@ import { Footer } from "@/components/site/Footer";
 import { Link } from "@/lib/route";
 import { Route as HomeRoute } from "@/routes/index";
 import { Route as AboutRoute } from "@/routes/about";
+import { Route as TutorialRoute } from "@/routes/tutorial";
 import { Route as ArticleRoute } from "@/routes/artikel";
 import { Route as ContactRoute } from "@/routes/contact";
 import { Route as TikTokRoute } from "@/routes/tiktok";
@@ -50,6 +51,7 @@ function Shell() {
         <Routes>
           <Route path="/" element={<Page route={HomeRoute} />} />
           <Route path="/about" element={<Page route={AboutRoute} />} />
+          <Route path="/tutorial" element={<Page route={TutorialRoute} />} />
           <Route path="/artikel" element={<Page route={ArticleRoute} />} />
           <Route path="/contact" element={<Page route={ContactRoute} />} />
           <Route path="/tiktok" element={<Page route={TikTokRoute} />} />

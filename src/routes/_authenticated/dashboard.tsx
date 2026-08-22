@@ -60,8 +60,8 @@ import {
   Video,
   X,
 } from "lucide-react";
-import { TcmHerbalReport, type TcmAiReport } from "@/components/screening/TcmHerbalReport";
-import { calculateTcmResult, getDominantConstitution, createTcmReportHelpers } from "@/lib/tcm";
+import { TcmHerbalReport, type TcmScreeningReport } from "@/components/screening/TcmHerbalReport";
+import { calculateTcmResult, getDominantConstitution, createTcmScreeningReportHelpers } from "@/lib/tcm";
 import { useAuth, useProfile, authHeaders } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -2748,7 +2748,7 @@ function AdminScreeningDetailView({
   onClose: () => void;
   waSettings?: { whatsappNumber?: string; whatsappMessageTemplate?: string } | null;
 }) {
-  const [aiReport, setAiReport] = useState<TcmAiReport | null>(() => {
+  const [aiReport, setAiReport] = useState<TcmScreeningReport | null>(() => {
     if (item.aiReport) {
       try {
         const parsed =
@@ -2760,7 +2760,7 @@ function AdminScreeningDetailView({
     }
     return null;
   });
-  const [isLoadingAi, setIsLoadingAi] = useState(false);
+  const [isLoadingReport, setIsLoadingAi] = useState(false);
   const [aiError, setAiError] = useState("");
   const [detailPage, setDetailPage] = useState(1);
 
@@ -2904,7 +2904,7 @@ function AdminScreeningDetailView({
 
   const calcRes = calculateTcmResult(parsedAnswers, allQuestions.length || 24);
   const domConst = getDominantConstitution(calcRes);
-  const helpers = createTcmReportHelpers(parsedAnswers, calcRes, item.complaints || undefined);
+  const helpers = createTcmScreeningReportHelpers(parsedAnswers, calcRes, item.complaints || undefined);
 
   return (
     <Card className="bg-card p-5 sm:p-8 shadow-xs space-y-6">
@@ -3115,8 +3115,8 @@ function AdminScreeningDetailView({
       <div className="border-t pt-6 space-y-4 text-left">
         <TcmHerbalReport
           report={aiReport}
-          isLoadingAi={isLoadingAi}
-          onRefreshAi={() => void generateReport()}
+          isLoadingReport={isLoadingReport}
+          onRefreshReport={() => void generateReport()}
           results={calcRes}
           dominant={domConst}
           answers={parsedAnswers}
@@ -3618,8 +3618,8 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
   const [submittedQuestionsPage, setSubmittedQuestionsPage] = useState(1);
 
   // AI Generated TCM & Herbal Report State
-  const [aiReport, setAiReport] = useState<TcmAiReport | null>(null);
-  const [isLoadingAi, setIsLoadingAi] = useState(false);
+  const [aiReport, setAiReport] = useState<TcmScreeningReport | null>(null);
+  const [isLoadingReport, setIsLoadingAi] = useState(false);
 
   const requestAiAnalysis = async (
     answersToUse: Record<string, number>,
@@ -3666,7 +3666,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
   };
 
   useEffect(() => {
-    if (isSubmitted && Object.keys(answers).length > 0 && !aiReport && !isLoadingAi) {
+    if (isSubmitted && Object.keys(answers).length > 0 && !aiReport && !isLoadingReport) {
       void requestAiAnalysis(answers);
     }
   }, [isSubmitted]);
@@ -4730,7 +4730,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                   }
                   const calcRes = calculateTcmResult(parsedAnswers, questions.length);
                   const domConst = getDominantConstitution(calcRes);
-                  const helpers = createTcmReportHelpers(parsedAnswers, calcRes, itemKeluhan);
+                  const helpers = createTcmScreeningReportHelpers(parsedAnswers, calcRes, itemKeluhan);
 
                   return (
                     <div className="border-t pt-6 space-y-6 text-left">
@@ -4823,8 +4823,8 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
 
                       <TcmHerbalReport
                         report={aiReport}
-                        isLoadingAi={isLoadingAi}
-                        onRefreshAi={() => void requestAiAnalysis(parsedAnswers)}
+                        isLoadingReport={isLoadingReport}
+                        onRefreshReport={() => void requestAiAnalysis(parsedAnswers)}
                         results={calcRes}
                         dominant={domConst}
                         answers={parsedAnswers}
@@ -4982,10 +4982,10 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
             <div className="space-y-6">
               {/* Stepper Progress Header */}
               <div className="bg-card border rounded-xl p-3 sm:p-4 shadow-xs">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <div
                     onClick={() => setScreeningStep("questions")}
-                    className={`flex-1 flex items-center gap-2 cursor-pointer pb-1 sm:pb-0 border-b-2 sm:border-b-0 transition-colors ${
+                    className={`flex items-center gap-2 cursor-pointer pb-1 sm:pb-0 border-b-2 sm:border-b-0 transition-colors ${
                       screeningStep === "questions"
                         ? "border-primary text-primary font-bold"
                         : Object.keys(answers).length === questions.length && questions.length > 0
@@ -5024,7 +5024,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                     onClick={() => {
                       if (isComplete) setScreeningStep("detail");
                     }}
-                    className={`flex-1 flex items-center gap-2 pb-1 sm:pb-0 border-b-2 sm:border-b-0 transition-colors ${
+                    className={`flex items-center gap-2 pb-1 sm:pb-0 border-b-2 sm:border-b-0 transition-colors ${
                       !isComplete ? "cursor-not-allowed opacity-60" : "cursor-pointer"
                     } ${
                       screeningStep === "detail"
@@ -5892,14 +5892,14 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
               {(() => {
                 const calcRes = calculateTcmResult(answers, questions.length);
                 const domConst = getDominantConstitution(calcRes);
-                const helpers = createTcmReportHelpers(answers, calcRes, complaints);
+                const helpers = createTcmScreeningReportHelpers(answers, calcRes, complaints);
 
                 return (
                   <div className="border-t pt-6 text-left space-y-4">
                     <TcmHerbalReport
                       report={aiReport}
-                      isLoadingAi={isLoadingAi}
-                      onRefreshAi={() => void requestAiAnalysis(answers)}
+                      isLoadingReport={isLoadingReport}
+                      onRefreshReport={() => void requestAiAnalysis(answers)}
                       results={calcRes}
                       dominant={domConst}
                       answers={answers}
