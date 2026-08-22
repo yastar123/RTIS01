@@ -722,6 +722,14 @@ function ReservationSection({
   onEdit: (reservation: Reservation) => void;
   onDelete: (reservation: Reservation) => void;
 }) {
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+  const totalPages = Math.max(1, Math.ceil(reservations.length / itemsPerPage));
+  const paginatedReservations = reservations.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   return (
     <Card>
       <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -740,7 +748,10 @@ function ReservationSection({
           <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
+            onChange={(event) => {
+              onQueryChange(event.target.value);
+              setCurrentPage(1);
+            }}
             placeholder="Cari nama, kode, nomor, layanan..."
             className="pl-9"
           />
@@ -759,7 +770,7 @@ function ReservationSection({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {reservations.map((reservation) => (
+              {paginatedReservations.map((reservation) => (
                 <TableRow key={reservation.id}>
                   <TableCell>
                     <p className="font-medium">{reservation.name}</p>
@@ -810,7 +821,7 @@ function ReservationSection({
                   </TableCell>
                 </TableRow>
               ))}
-              {reservations.length === 0 && (
+              {paginatedReservations.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="h-28 text-center text-muted-foreground">
                     Belum ada reservasi.
@@ -823,7 +834,7 @@ function ReservationSection({
 
         {/* Mobile View Card List */}
         <div className="grid gap-3 md:hidden">
-          {reservations.map((reservation) => (
+          {paginatedReservations.map((reservation) => (
             <div
               key={reservation.id}
               className="rounded-lg border p-4 space-y-3 bg-card shadow-xs hover:border-primary/40 transition-all"
@@ -894,12 +905,37 @@ function ReservationSection({
               </div>
             </div>
           ))}
-          {reservations.length === 0 && (
+          {paginatedReservations.length === 0 && (
             <div className="text-center py-8 text-xs text-muted-foreground border border-dashed rounded-lg">
               Belum ada reservasi.
             </div>
           )}
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 mt-6">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-medium">
+              Halaman {currentPage} dari {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -1706,9 +1742,18 @@ function ScreeningSection({
     return item.level?.toLowerCase() === levelFilter.toLowerCase();
   });
 
+  const paginatedScreenings = filtered.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   const highRiskCount = screenings.filter((s) => s.level?.toLowerCase() === "tinggi").length;
   const mediumRiskCount = screenings.filter((s) => s.level?.toLowerCase() === "sedang").length;
   const lowRiskCount = screenings.filter((s) => s.level?.toLowerCase() === "rendah").length;
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
 
   const handleShareWhatsApp = (item: AdminScreeningItem) => {
     if (!item.phone) {
@@ -1907,7 +1952,7 @@ function ScreeningSection({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map((item) => {
+                  {paginatedScreenings.map((item) => {
                     const isHigh = item.level?.toLowerCase() === "tinggi";
                     const isMed = item.level?.toLowerCase() === "sedang";
 
@@ -2006,6 +2051,31 @@ function ScreeningSection({
                   })}
                 </TableBody>
               </Table>
+              
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 py-4 border-t">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-sm font-medium">
+                    Halaman {currentPage} dari {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
@@ -2094,12 +2164,12 @@ function ScreeningDetailModal({
         }),
       });
 
-      if (!res.ok) throw new Error("Gagal menghasilkan analisa holistik AI TCM.");
+      if (!res.ok) throw new Error("Gagal menghasilkan analisa holistik TCM.");
       const data = await res.json();
       setAiReport(data);
       item.aiReport = JSON.stringify(data);
     } catch (err) {
-      setAiError(err instanceof Error ? err.message : "Gagal memuat AI report.");
+      setAiError(err instanceof Error ? err.message : "Gagal memuat laporan analisis.");
     } finally {
       setIsLoadingAi(false);
     }

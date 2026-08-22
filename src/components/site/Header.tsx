@@ -11,6 +11,7 @@ export const navItems = [
   { to: "/reservasi", label: "Reservasi" },
   { to: "/cek-reservasi", label: "Cek Reservasi" },
   { to: "/artikel", label: "Artikel" },
+  { to: "/tutorial", label: "Tutorial" },
   { to: "/tiktok", label: "TikTok" },
   { to: "/contact", label: "Contact" },
 ] as const;

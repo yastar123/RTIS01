@@ -1072,7 +1072,7 @@ export const TcmHerbalReport: FC<TcmHerbalReportProps> = ({
             </div>
             <span className="self-start sm:self-center shrink-0 rounded-full bg-rose-100 px-3 py-1 text-[11px] font-bold text-rose-900 border border-rose-300 flex items-center gap-1.5">
               <Sparkles className="h-3.5 w-3.5 text-rose-700" />
-              Massage AI Prescription (Khusus Admin)
+              Preskripsi Titik Pijat (Khusus Admin)
             </span>
           </div>
 

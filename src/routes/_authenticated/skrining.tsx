@@ -1505,7 +1505,7 @@ function Skrining() {
             </h1>
             <p className="mt-2 text-sm text-neutral-500 leading-relaxed">
               Silakan upload foto atau rekaman video lidah Anda dan lengkapi rincian keluhan tubuh
-              agar diagnosa TCM &amp; AI Herbal semakin akurat.
+              agar diagnosa TCM &amp; Herbal semakin akurat.
             </p>
 
             <form

@@ -43,6 +43,7 @@ import {
   Pencil,
   Phone,
   PhoneCall,
+  PlayCircle,
   Plus,
   Printer,
   RefreshCw,
@@ -140,6 +141,11 @@ export function DashboardPage() {
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [tutorials, setTutorials] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch("/api/tutorials").then(r => r.json()).then(setTutorials).catch(console.error);
+  }, []);
 
   useEffect(() => {
     if (location.pathname === "/profile") setSection("profile");
@@ -161,6 +167,7 @@ export function DashboardPage() {
         { key: "screening", label: "Skrening", icon: Stethoscope },
         { key: "articles", label: "Artikel", icon: BookOpen },
         { key: "reservations", label: "Reservasi", icon: CalendarDays },
+        { key: "tutorials", label: "Tutorial", icon: PlayCircle },
         { key: "profile", label: "Profil Saya", icon: UserCircle },
       ];
 
@@ -474,6 +481,24 @@ export function DashboardPage() {
           {section === "reservations" && <ReservationsTab />}
           {section === "screening" && <ScreeningTab onNavigate={setSection} />}
           {section === "articles" && <ArticlesTab />}
+          {section === "tutorials" && (
+            <Card>
+              <CardHeader><CardTitle>Tutorial Pasien</CardTitle></CardHeader>
+              <CardContent className="grid gap-4">
+                {tutorials.map((t) => (
+                  <div key={t.id} className="border rounded p-4">
+                    <h3 className="font-semibold">{t.title}</h3>
+                    <p className="text-sm text-muted-foreground">{t.description}</p>
+                    {t.mediaType === 'video' ? (
+                       <video src={t.mediaUrl} controls className="mt-2 w-full" />
+                    ) : (
+                       <img src={t.mediaUrl} alt={t.title} className="mt-2 w-full rounded" />
+                    )}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
           {section === "cms" && <CmsTab />}
           {section === "users" && <UsersTab />}
           {section === "settings" && <SettingsTab />}
@@ -2817,12 +2842,12 @@ function AdminScreeningDetailView({
         }),
       });
 
-      if (!res.ok) throw new Error("Gagal menghasilkan analisa holistik AI TCM.");
+      if (!res.ok) throw new Error("Gagal menghasilkan analisa holistik TCM.");
       const data = await res.json();
       setAiReport(data);
       item.aiReport = JSON.stringify(data);
     } catch (err) {
-      setAiError(err instanceof Error ? err.message : "Gagal memuat AI report.");
+      setAiError(err instanceof Error ? err.message : "Gagal memuat laporan analisis.");
     } finally {
       setIsLoadingAi(false);
     }
@@ -2935,7 +2960,7 @@ function AdminScreeningDetailView({
           <Sparkles className="h-5 w-5 text-primary shrink-0" />
           <div>
             <h4 className="font-bold text-sm text-foreground">
-              Laporan Analisis Herbal AI &amp; Pemetaan Holistik TCM
+              Laporan Analisis Herbal &amp; Pemetaan Holistik TCM
             </h4>
             <p className="text-xs text-muted-foreground">
               Mencakup rekomendasi Herbal Indonesia, Herbal China, Titik Akupresur, &amp; Pola
@@ -3221,7 +3246,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
   const downloadReportPdf = async (elementId: string) => {
     const element = document.getElementById(elementId);
     if (!element) {
-      toast.error("Format laporan tidak ditemukan. Pastikan laporan AI sudah dimuat.");
+      toast.error("Format laporan tidak ditemukan. Pastikan laporan sudah dimuat.");
       return;
     }
     const toastId = toast.loading("Sedang menyiapkan dokumen PDF...");
@@ -4427,7 +4452,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                                         className="text-xs gap-1.5 bg-teal-700 hover:bg-teal-800 text-white flex-1"
                                       >
                                         <Eye className="h-3.5 w-3.5" />
-                                        Lihat Laporan AI Pasien
+                                        Lihat Laporan Skrening Pasien
                                       </Button>
 
                                       {item.phone && (
@@ -4648,7 +4673,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                     <Sparkles className="h-5 w-5 text-primary shrink-0" />
                     <div>
                       <h4 className="font-bold text-sm text-foreground">
-                        Laporan Analisis Herbal AI & Pemetaan Holistik TCM
+                        Laporan Analisis Herbal & Pemetaan Holistik TCM
                       </h4>
                       <p className="text-xs text-muted-foreground">
                         Mencakup rekomendasi Herbal Indonesia, Herbal China, Titik Akupresur, & Pola
@@ -5079,7 +5104,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                     <div className="min-w-0">
                       <p className="text-xs sm:text-sm truncate">Tahap 3: Simpan & Hasil</p>
                       <p className="text-[10px] text-muted-foreground hidden sm:block">
-                        Konfirmasi & Analisis AI
+                        Konfirmasi & Analisis
                       </p>
                     </div>
                   </div>
@@ -5210,7 +5235,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                         className="text-xs sm:text-sm resize-none"
                       />
                       <p className="text-[11px] text-muted-foreground">
-                        *Catatan keluhan ini akan dianalisa bersama hasil kuesioner oleh sistem AI
+                        *Catatan keluhan ini akan dianalisa bersama hasil kuesioner oleh sistem
                         Herbal & Terapis.
                       </p>
                     </CardContent>
@@ -5339,7 +5364,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                       </div>
                       <CardDescription className="text-xs">
                         Lampirkan dokumen riwayat kesehatan seperti Hasil Lab, Rekam Medis, Foto
-                        Rontgen, USG, Surat/Rujukan Dokter, atau Resep Obat untuk membantu AI &
+                        Rontgen, USG, Surat/Rujukan Dokter, atau Resep Obat untuk membantu
                         Terapis memahami kondisi medis Anda secara komprehensif.
                       </CardDescription>
                     </CardHeader>
@@ -5524,7 +5549,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                 <div className="space-y-6">
                   <div className="bg-primary/5 border border-primary/20 rounded-xl p-4">
                     <h3 className="text-sm font-semibold text-foreground">
-                      Langkah 3: Konfirmasi Data Skrening & Analisis AI
+                      Langkah 3: Konfirmasi Data Skrening & Analisis
                     </h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       Periksa kembali ringkasan jawaban kuesioner dan data lidah sebelum menyimpan
@@ -5722,7 +5747,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                       ) : (
                         <Sparkles className="h-4 w-4" />
                       )}
-                      Simpan & Dapatkan Laporan AI TCM
+                      Simpan & Dapatkan Laporan TCM
                     </Button>
                   </div>
                 </div>
@@ -5855,7 +5880,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                   <Sparkles className="h-5 w-5 text-emerald-600 shrink-0" />
                   <div>
                     <h4 className="font-bold text-sm text-emerald-950">
-                      Laporan Analisis AI Herbal Berhasil Dihasilkan!
+                      Laporan Analisis Herbal Berhasil Dihasilkan!
                     </h4>
                     <p className="text-xs text-emerald-800">
                       Rekomendasi lengkap Herbal Indonesia, Herbal China (TCM), & Akupresur telah
