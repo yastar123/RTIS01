@@ -371,24 +371,29 @@ app.post("/api/profile/screening-results", async (req, res) => {
     const user = await requireUser(req, res);
     if (!user) return;
 
-    const { answers, score, maxScore, level, advice, aiReport } = req.body;
-    if (
-      answers === undefined ||
-      score === undefined ||
-      maxScore === undefined ||
-      !level ||
-      !advice
-    ) {
-      return res.status(400).json({ message: "Data hasil skrining tidak lengkap." });
-    }
+    let { answers, score, maxScore, level, advice, aiReport } = req.body || {};
+
+    const cleanRawAnswers = answers !== undefined && answers !== null ? answers : {};
+    const numMaxScore = maxScore !== undefined && maxScore !== null && !isNaN(Number(maxScore)) ? Number(maxScore) : 100;
+    const numScore = score !== undefined && score !== null && !isNaN(Number(score)) ? Number(score) : 0;
+    
+    const derivedLevel = (level && String(level).trim()) || (numScore >= 70 ? "Rendah" : numScore >= 40 ? "Sedang" : "Tinggi");
+    const defaultAdvice = 
+      derivedLevel === "Rendah"
+        ? "Kondisi tubuh Anda relatif seimbang. Pertahankan pola hidup sehat, nutrisi seimbang, dan istirahat teratur."
+        : derivedLevel === "Sedang"
+          ? "Terdapat beberapa indikasi ketidakseimbangan energi/qi. Disarankan melakukan konsultasi awal untuk menentukan terapi pendukung yang tepat."
+          : "Banyak tanda ketidakseimbangan signifikan terdeteksi. Kami menyarankan Anda menjadwalkan konsultasi mendalam dengan praktisi kami agar dapat ditangani secara dini.";
+    
+    const finalAdvice = (advice && String(advice).trim()) || defaultAdvice;
 
     const db = getDb();
-    let rawAnswers: unknown = answers;
-    if (typeof answers === "string") {
+    let rawAnswers: unknown = cleanRawAnswers;
+    if (typeof cleanRawAnswers === "string") {
       try {
-        rawAnswers = JSON.parse(answers);
+        rawAnswers = JSON.parse(cleanRawAnswers);
       } catch {
-        rawAnswers = answers;
+        rawAnswers = cleanRawAnswers;
       }
     }
     const cleanAnswers =
@@ -398,9 +403,9 @@ app.post("/api/profile/screening-results", async (req, res) => {
 
     const answersPayload = {
       answers: cleanAnswers,
-      complaints: req.body.complaints || "",
-      tonguePhotoUrl: req.body.tonguePhotoUrl || null,
-      hospitalDocs: Array.isArray(req.body.hospitalDocs) ? req.body.hospitalDocs : [],
+      complaints: req.body?.complaints || "",
+      tonguePhotoUrl: req.body?.tonguePhotoUrl || null,
+      hospitalDocs: Array.isArray(req.body?.hospitalDocs) ? req.body.hospitalDocs : [],
     };
     const answersStr = JSON.stringify(answersPayload);
     const aiReportStr = aiReport
@@ -415,10 +420,10 @@ app.post("/api/profile/screening-results", async (req, res) => {
       .values({
         userId: user.id,
         answers: answersStr,
-        score: Number(score),
-        maxScore: Number(maxScore),
-        level,
-        advice,
+        score: numScore,
+        maxScore: numMaxScore,
+        level: derivedLevel,
+        advice: finalAdvice,
         aiReport: aiReportStr,
         createdAt: new Date(),
       })
