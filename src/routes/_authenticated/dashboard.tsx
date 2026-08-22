@@ -125,7 +125,15 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 });
 
 type Section =
-  "overview" | "profile" | "reservations" | "screening" | "articles" | "cms" | "users" | "settings";
+  | "overview"
+  | "profile"
+  | "reservations"
+  | "screening"
+  | "articles"
+  | "tutorials"
+  | "cms"
+  | "users"
+  | "settings";
 
 export function DashboardPage() {
   const { user, signOut } = useAuth();
@@ -141,11 +149,6 @@ export function DashboardPage() {
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const [tutorials, setTutorials] = useState<any[]>([]);
-
-  useEffect(() => {
-    fetch("/api/tutorials").then(r => r.json()).then(setTutorials).catch(console.error);
-  }, []);
 
   useEffect(() => {
     if (location.pathname === "/profile") setSection("profile");
@@ -159,6 +162,7 @@ export function DashboardPage() {
         { key: "reservations", label: "Reservasi", icon: CalendarDays },
         { key: "screening", label: "Skrening", icon: Stethoscope },
         { key: "articles", label: "Artikel", icon: BookOpen },
+        { key: "tutorials", label: "Tutorial", icon: PlayCircle },
         { key: "users", label: "Manajemen User", icon: Users },
         { key: "cms", label: "Kelola CMS", icon: Globe },
         { key: "settings", label: "Pengaturan WA", icon: Settings },
@@ -481,24 +485,7 @@ export function DashboardPage() {
           {section === "reservations" && <ReservationsTab />}
           {section === "screening" && <ScreeningTab onNavigate={setSection} />}
           {section === "articles" && <ArticlesTab />}
-          {section === "tutorials" && (
-            <Card>
-              <CardHeader><CardTitle>Tutorial Pasien</CardTitle></CardHeader>
-              <CardContent className="grid gap-4">
-                {tutorials.map((t) => (
-                  <div key={t.id} className="border rounded p-4">
-                    <h3 className="font-semibold">{t.title}</h3>
-                    <p className="text-sm text-muted-foreground">{t.description}</p>
-                    {t.mediaType === 'video' ? (
-                       <video src={t.mediaUrl} controls className="mt-2 w-full" />
-                    ) : (
-                       <img src={t.mediaUrl} alt={t.title} className="mt-2 w-full rounded" />
-                    )}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
+          {section === "tutorials" && <TutorialsTab />}
           {section === "cms" && <CmsTab />}
           {section === "users" && <UsersTab />}
           {section === "settings" && <SettingsTab />}
@@ -6444,6 +6431,693 @@ function ArticlesTab() {
           </DialogContent>
         </Dialog>
       )}
+    </div>
+  );
+}
+
+interface TutorialItem {
+  id: string;
+  title: string;
+  description: string;
+  mediaUrl?: string | null;
+  mediaType?: "image" | "video" | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+function TutorialsTab() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+
+  const [tutorialsList, setTutorialsList] = useState<TutorialItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [mediaFilter, setMediaFilter] = useState<"all" | "video" | "image">("all");
+
+  // Admin Dialog & Form State
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingTutorial, setEditingTutorial] = useState<TutorialItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<TutorialItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Form Fields
+  const [formTitle, setFormTitle] = useState("");
+  const [formDescription, setFormDescription] = useState("");
+  const [formMediaType, setFormMediaType] = useState<"image" | "video">("video");
+  const [mediaSource, setMediaSource] = useState<"upload" | "url">("upload");
+  const [formMediaUrl, setFormMediaUrl] = useState("");
+  const [uploadedFileName, setUploadedFileName] = useState("");
+  const [isReadingFile, setIsReadingFile] = useState(false);
+  const [previewMedia, setPreviewMedia] = useState<{ url: string; type: "image" | "video"; title: string } | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchTutorials = async () => {
+    setIsLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/tutorials");
+      if (!res.ok) throw new Error("Gagal memuat tutorial.");
+      const data = await res.json();
+      setTutorialsList(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal memuat tutorial.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchTutorials();
+  }, []);
+
+  const handleOpenAdd = () => {
+    setEditingTutorial(null);
+    setFormTitle("");
+    setFormDescription("");
+    setFormMediaType("video");
+    setMediaSource("upload");
+    setFormMediaUrl("");
+    setUploadedFileName("");
+    setIsFormOpen(true);
+  };
+
+  const handleOpenEdit = (item: TutorialItem) => {
+    setEditingTutorial(item);
+    setFormTitle(item.title);
+    setFormDescription(item.description);
+    setFormMediaType((item.mediaType as "image" | "video") || "video");
+    setMediaSource(item.mediaUrl?.startsWith("data:") ? "upload" : "url");
+    setFormMediaUrl(item.mediaUrl || "");
+    setUploadedFileName(item.mediaUrl?.startsWith("data:") ? "File media terlampir" : "");
+    setIsFormOpen(true);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 40 * 1024 * 1024) {
+      toast.error("Ukuran file maksimal 40MB.");
+      return;
+    }
+
+    setIsReadingFile(true);
+    setUploadedFileName(file.name);
+
+    if (file.type.startsWith("video/")) {
+      setFormMediaType("video");
+    } else if (file.type.startsWith("image/")) {
+      setFormMediaType("image");
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFormMediaUrl(reader.result as string);
+      setIsReadingFile(false);
+      toast.success("File media berhasil dimuat!");
+    };
+    reader.onerror = () => {
+      toast.error("Gagal membaca file media.");
+      setIsReadingFile(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveTutorial = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!formTitle.trim() || !formDescription.trim()) {
+      toast.error("Judul dan deskripsi tutorial wajib diisi.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const url = editingTutorial
+        ? `/api/admin/tutorials/${editingTutorial.id}`
+        : "/api/admin/tutorials";
+      const method = editingTutorial ? "PATCH" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(),
+        },
+        body: JSON.stringify({
+          title: formTitle.trim(),
+          description: formDescription.trim(),
+          mediaUrl: formMediaUrl.trim() || null,
+          mediaType: formMediaType,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || "Gagal menyimpan tutorial.");
+      }
+
+      toast.success(editingTutorial ? "Tutorial berhasil diperbarui!" : "Tutorial baru berhasil ditambahkan!");
+      setIsFormOpen(false);
+      void fetchTutorials();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal menyimpan tutorial.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteTutorial = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/admin/tutorials/${deleteTarget.id}`, {
+        method: "DELETE",
+        headers: {
+          ...authHeaders(),
+        },
+      });
+
+      if (!res.ok) throw new Error("Gagal menghapus tutorial.");
+
+      toast.success("Tutorial berhasil dihapus.");
+      setDeleteTarget(null);
+      void fetchTutorials();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal menghapus tutorial.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const filteredTutorials = tutorialsList.filter((item) => {
+    const matchSearch =
+      item.title.toLowerCase().includes(search.toLowerCase()) ||
+      item.description.toLowerCase().includes(search.toLowerCase());
+    const matchType =
+      mediaFilter === "all" ||
+      (mediaFilter === "video" && item.mediaType === "video") ||
+      (mediaFilter === "image" && (item.mediaType === "image" || !item.mediaType));
+    return matchSearch && matchType;
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Header & Action Bar */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+            {isAdmin ? "Kelola Tutorial & Panduan Terapi" : "Tutorial & Panduan Kesehatan"}
+          </h2>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+            {isAdmin
+              ? "Kelola konten video dan gambar panduan terapi untuk pasien"
+              : "Koleksi panduan visual dan video terapi untuk mendukung pemulihan Anda"}
+          </p>
+        </div>
+
+        {isAdmin && (
+          <Button onClick={handleOpenAdd} className="gap-2 shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm">
+            <Plus className="h-4 w-4" />
+            <span>Tambah Tutorial Baru</span>
+          </Button>
+        )}
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-card border rounded-xl p-3 shadow-xs">
+        <div className="flex flex-1 items-center gap-2">
+          <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+          <Input
+            placeholder="Cari judul atau topik tutorial..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-0 h-9"
+          />
+          {search && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              onClick={() => setSearch("")}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5 border-t md:border-t-0 md:border-l pt-2 md:pt-0 md:pl-3">
+          <Button
+            type="button"
+            size="sm"
+            variant={mediaFilter === "all" ? "default" : "outline"}
+            className="text-xs h-8"
+            onClick={() => setMediaFilter("all")}
+          >
+            Semua ({tutorialsList.length})
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={mediaFilter === "video" ? "default" : "outline"}
+            className="text-xs h-8 gap-1"
+            onClick={() => setMediaFilter("video")}
+          >
+            <Video className="h-3.5 w-3.5" />
+            Video
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={mediaFilter === "image" ? "default" : "outline"}
+            className="text-xs h-8 gap-1"
+            onClick={() => setMediaFilter("image")}
+          >
+            <ImageIcon className="h-3.5 w-3.5" />
+            Gambar
+          </Button>
+        </div>
+      </div>
+
+      {/* Error state */}
+      {error && (
+        <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive flex items-center justify-between">
+          <span>{error}</span>
+          <Button variant="outline" size="sm" onClick={fetchTutorials} className="text-xs">
+            Coba Lagi
+          </Button>
+        </div>
+      )}
+
+      {/* Loading state */}
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-16 gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Memuat tutorial...</p>
+        </div>
+      ) : filteredTutorials.length === 0 ? (
+        /* Empty State */
+        <Card className="p-12 text-center bg-card/60 border-dashed">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary mb-4">
+            <PlayCircle className="h-7 w-7" />
+          </div>
+          <h3 className="text-base font-semibold text-foreground">
+            {search ? "Tutorial Tidak Ditemukan" : "Belum Ada Tutorial"}
+          </h3>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1 max-w-md mx-auto">
+            {search
+              ? "Tidak ada tutorial yang cocok dengan kata kunci pencarian Anda. Coba kata kunci lain."
+              : isAdmin
+              ? "Tambahkan tutorial pertama Anda sekarang untuk membagikan panduan terapi, latihan fisik, atau video edukasi kepada pasien."
+              : "Belum ada tutorial yang dipublikasikan saat ini. Silakan kembali lagi nanti."}
+          </p>
+          {isAdmin && !search && (
+            <Button onClick={handleOpenAdd} className="mt-5 gap-2" size="sm">
+              <Plus className="h-4 w-4" />
+              Tambah Tutorial Sekarang
+            </Button>
+          )}
+        </Card>
+      ) : (
+        /* Tutorial Grid */
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {filteredTutorials.map((item) => {
+            const isVideo = item.mediaType === "video";
+            return (
+              <Card key={item.id} className="overflow-hidden flex flex-col group border hover:border-primary/40 hover:shadow-md transition-all duration-200">
+                {/* Media Container */}
+                <div className="relative aspect-video w-full bg-neutral-900 flex items-center justify-center overflow-hidden">
+                  {item.mediaUrl ? (
+                    isVideo ? (
+                      <video
+                        src={item.mediaUrl}
+                        controls
+                        playsInline
+                        className="w-full h-full object-cover"
+                        preload="metadata"
+                      />
+                    ) : (
+                      <img
+                        src={item.mediaUrl}
+                        alt={item.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 cursor-pointer"
+                        onClick={() =>
+                          setPreviewMedia({
+                            url: item.mediaUrl!,
+                            type: "image",
+                            title: item.title,
+                          })
+                        }
+                      />
+                    )
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-neutral-400 gap-2 p-4 text-center">
+                      <PlayCircle className="h-10 w-10 text-neutral-500" />
+                      <span className="text-xs">Tidak ada media lampiran</span>
+                    </div>
+                  )}
+
+                  {/* Badge Media Type */}
+                  <div className="absolute top-2.5 right-2.5 z-10">
+                    <Badge
+                      variant="secondary"
+                      className="bg-black/70 text-white border-0 text-[11px] backdrop-blur-xs flex items-center gap-1"
+                    >
+                      {isVideo ? (
+                        <>
+                          <Video className="h-3 w-3 text-amber-400" />
+                          Video
+                        </>
+                      ) : (
+                        <>
+                          <ImageIcon className="h-3 w-3 text-teal-400" />
+                          Gambar
+                        </>
+                      )}
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* Content */}
+                <CardContent className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                  <div>
+                    <h3 className="font-bold text-base text-foreground leading-snug line-clamp-2">
+                      {item.title}
+                    </h3>
+                    <p className="text-xs sm:text-sm text-muted-foreground mt-2 line-clamp-4 leading-relaxed whitespace-pre-line">
+                      {item.description}
+                    </p>
+                  </div>
+
+                  {/* Admin Actions */}
+                  {isAdmin && (
+                    <div className="pt-3 border-t flex items-center justify-between gap-2 mt-auto">
+                      <span className="text-[10px] text-muted-foreground">
+                        {item.createdAt ? new Date(item.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }) : ""}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs gap-1.5"
+                          onClick={() => handleOpenEdit(item)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5"
+                          onClick={() => setDeleteTarget(item)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Hapus
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Admin Add/Edit Modal */}
+      <Dialog open={isFormOpen} onOpenChange={(open) => !open && !isSubmitting && setIsFormOpen(false)}>
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-lg sm:text-xl font-bold">
+              {editingTutorial ? "Edit Tutorial" : "Tambah Tutorial Baru"}
+            </DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
+              Lengkapi judul, panduan instruksi, dan lampirkan file media (video atau gambar).
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveTutorial} className="space-y-4 pt-2">
+            {/* Title */}
+            <div className="space-y-1.5">
+              <Label htmlFor="tut-title" className="text-xs font-semibold">
+                Judul Tutorial <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="tut-title"
+                placeholder="Contoh: Panduan Terapi Relaksasi Otot Leher & Bahu"
+                value={formTitle}
+                onChange={(e) => setFormTitle(e.target.value)}
+                required
+                className="text-sm"
+              />
+            </div>
+
+            {/* Description */}
+            <div className="space-y-1.5">
+              <Label htmlFor="tut-desc" className="text-xs font-semibold">
+                Deskripsi & Langkah-langkah <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                id="tut-desc"
+                placeholder="Tuliskan petunjuk langkah-demi-langkah, durasi, dan anjuran terapi bagi pasien..."
+                value={formDescription}
+                onChange={(e) => setFormDescription(e.target.value)}
+                rows={4}
+                required
+                className="text-sm resize-y"
+              />
+            </div>
+
+            {/* Media Type */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Tipe Media</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={formMediaType === "video" ? "default" : "outline"}
+                  className="gap-2 text-xs justify-center"
+                  onClick={() => setFormMediaType("video")}
+                >
+                  <Video className="h-4 w-4" />
+                  Video Tutorial
+                </Button>
+                <Button
+                  type="button"
+                  variant={formMediaType === "image" ? "default" : "outline"}
+                  className="gap-2 text-xs justify-center"
+                  onClick={() => setFormMediaType("image")}
+                >
+                  <ImageIcon className="h-4 w-4" />
+                  Gambar / Infografis
+                </Button>
+              </div>
+            </div>
+
+            {/* Media Source Choice */}
+            <div className="space-y-2 pt-1 border-t">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold">Lampiran Media</Label>
+                <div className="flex items-center gap-1 bg-muted p-0.5 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setMediaSource("upload")}
+                    className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all ${
+                      mediaSource === "upload"
+                        ? "bg-card text-foreground shadow-xs font-semibold"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Upload File
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMediaSource("url")}
+                    className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all ${
+                      mediaSource === "url"
+                        ? "bg-card text-foreground shadow-xs font-semibold"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Input URL
+                  </button>
+                </div>
+              </div>
+
+              {mediaSource === "upload" ? (
+                <div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept={formMediaType === "video" ? "video/*" : "image/*"}
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-2 border-dashed rounded-xl p-5 text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-2"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      {isReadingFile ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <Upload className="h-5 w-5" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">
+                        {isReadingFile
+                          ? "Sedang memproses file..."
+                          : uploadedFileName || `Klik untuk upload ${formMediaType === "video" ? "Video (MP4, WEBM)" : "Gambar (JPG, PNG, WEBP)"}`}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Maksimal ukuran file 40MB
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Input
+                    placeholder="https://contoh.com/video.mp4 atau link gambar"
+                    value={formMediaUrl}
+                    onChange={(e) => setFormMediaUrl(e.target.value)}
+                    className="text-xs"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Masukkan URL file video (.mp4/.webm) atau URL gambar langsung.
+                  </p>
+                </div>
+              )}
+
+              {/* Live Preview */}
+              {formMediaUrl && (
+                <div className="mt-3 rounded-xl border bg-muted/30 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5">
+                      <Eye className="h-3.5 w-3.5" /> Pratinjau Media
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-[10px] text-destructive hover:bg-destructive/10 px-2"
+                      onClick={() => {
+                        setFormMediaUrl("");
+                        setUploadedFileName("");
+                      }}
+                    >
+                      Hapus Media
+                    </Button>
+                  </div>
+
+                  <div className="aspect-video w-full rounded-lg overflow-hidden bg-black flex items-center justify-center">
+                    {formMediaType === "video" ? (
+                      <video src={formMediaUrl} controls className="w-full h-full object-contain" />
+                    ) : (
+                      <img src={formMediaUrl} alt="Preview" className="w-full h-full object-contain" />
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="pt-3 border-t gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsFormOpen(false)}
+                disabled={isSubmitting}
+              >
+                Batal
+              </Button>
+              <Button type="submit" disabled={isSubmitting || isReadingFile} className="gap-2">
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Menyimpan...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    <span>Simpan Tutorial</span>
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && !isDeleting && setDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-destructive flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              Hapus Tutorial
+            </DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
+              Apakah Anda yakin ingin menghapus tutorial{" "}
+              <strong className="text-foreground">"{deleteTarget?.title}"</strong>? Tindakan ini tidak dapat dibatalkan.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeleteTarget(null)}
+              disabled={isDeleting}
+            >
+              Batal
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleDeleteTutorial}
+              disabled={isDeleting}
+              className="gap-2"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Menghapus...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Ya, Hapus Tutorial
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Lightbox / Media Viewer */}
+      <Dialog open={!!previewMedia} onOpenChange={(open) => !open && setPreviewMedia(null)}>
+        <DialogContent className="sm:max-w-3xl p-2 bg-black/95 border-0 text-white">
+          <div className="flex items-center justify-between p-2">
+            <h4 className="text-sm font-semibold truncate text-white">{previewMedia?.title}</h4>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white hover:bg-white/20 h-8 w-8"
+              onClick={() => setPreviewMedia(null)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex items-center justify-center max-h-[80vh] overflow-hidden rounded-lg">
+            {previewMedia?.type === "video" ? (
+              <video src={previewMedia.url} controls autoPlay className="max-h-[75vh] w-auto rounded" />
+            ) : (
+              <img src={previewMedia?.url} alt={previewMedia?.title} className="max-h-[75vh] w-auto object-contain rounded" />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

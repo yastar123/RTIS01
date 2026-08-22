@@ -30,12 +30,15 @@ import {
   Sparkles,
   PhoneCall,
   Loader2,
-  Bot,
   RefreshCw,
   CheckCircle2,
   AlertTriangle,
   Printer,
   PlayCircle,
+  Upload,
+  Video,
+  ImageIcon,
+  Save,
 } from "lucide-react";
 import { useAuth, authHeaders } from "@/hooks/use-auth";
 import { TcmHerbalReport, type TcmScreeningReport } from "@/components/screening/TcmHerbalReport";
@@ -2500,43 +2503,244 @@ function TutorialDialog({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const [form, setForm] = useState({ title: "", description: "", mediaUrl: "", mediaType: "image" });
+  const [form, setForm] = useState({ title: "", description: "", mediaUrl: "", mediaType: "video" });
+  const [mediaSource, setMediaSource] = useState<"upload" | "url">("upload");
+  const [fileName, setFileName] = useState("");
+  const [isReading, setIsReading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (value && value !== "new") setForm(value);
-    else setForm({ title: "", description: "", mediaUrl: "", mediaType: "image" });
+    if (value && value !== "new") {
+      setForm({
+        title: value.title || "",
+        description: value.description || "",
+        mediaUrl: value.mediaUrl || "",
+        mediaType: value.mediaType || "video",
+      });
+      setMediaSource(value.mediaUrl?.startsWith("data:") ? "upload" : "url");
+      setFileName(value.mediaUrl?.startsWith("data:") ? "File media terlampir" : "");
+    } else {
+      setForm({ title: "", description: "", mediaUrl: "", mediaType: "video" });
+      setMediaSource("upload");
+      setFileName("");
+    }
   }, [value]);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 40 * 1024 * 1024) {
+      toast.error("Ukuran file maksimal 40MB.");
+      return;
+    }
+
+    setIsReading(true);
+    setFileName(file.name);
+
+    if (file.type.startsWith("video/")) {
+      setForm((prev) => ({ ...prev, mediaType: "video" }));
+    } else if (file.type.startsWith("image/")) {
+      setForm((prev) => ({ ...prev, mediaType: "image" }));
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setForm((prev) => ({ ...prev, mediaUrl: reader.result as string }));
+      setIsReading(false);
+      toast.success("Media berhasil dimuat!");
+    };
+    reader.onerror = () => {
+      toast.error("Gagal membaca file.");
+      setIsReading(false);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!form.title.trim() || !form.description.trim()) {
+      toast.error("Judul dan deskripsi wajib diisi");
+      return;
+    }
+    setIsSubmitting(true);
     try {
       await adminFetch(value === "new" ? "/api/admin/tutorials" : `/api/admin/tutorials/${value.id}`, {
         method: value === "new" ? "POST" : "PATCH",
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          title: form.title.trim(),
+          description: form.description.trim(),
+          mediaUrl: form.mediaUrl.trim() || null,
+          mediaType: form.mediaType,
+        }),
       });
       await onSaved();
       onClose();
-      toast.success("Tutorial disimpan");
+      toast.success("Tutorial berhasil disimpan");
     } catch (e) {
       toast.error("Gagal menyimpan tutorial");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <Dialog open={!!value} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+    <Dialog open={!!value} onOpenChange={(open) => !open && !isSubmitting && onClose()}>
+      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{value === "new" ? "Tambah Tutorial" : "Edit Tutorial"}</DialogTitle>
+          <DialogTitle>{value === "new" ? "Tambah Tutorial Baru" : "Edit Tutorial"}</DialogTitle>
+          <DialogDescription className="text-xs">
+            Lengkapi data panduan tutorial dan lampirkan video atau gambar panduan.
+          </DialogDescription>
         </DialogHeader>
-        <form onSubmit={submit} className="space-y-4">
-          <Input placeholder="Judul" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
-          <Textarea placeholder="Deskripsi" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} required />
-          <Input placeholder="URL Media" value={form.mediaUrl} onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })} />
-          <select value={form.mediaType} onChange={(e) => setForm({ ...form, mediaType: e.target.value })}>
-            <option value="image">Gambar</option>
-            <option value="video">Video</option>
-          </select>
-          <Button type="submit">Simpan</Button>
+        <form onSubmit={submit} className="space-y-4 pt-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">Judul Tutorial *</Label>
+            <Input
+              placeholder="Contoh: Panduan Terapi Relaksasi Leher & Bahu"
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              required
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">Deskripsi & Langkah-langkah *</Label>
+            <Textarea
+              placeholder="Tuliskan petunjuk langkah-demi-langkah bagi pasien..."
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              rows={4}
+              required
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">Tipe Media</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={form.mediaType === "video" ? "default" : "outline"}
+                className="gap-2 text-xs justify-center"
+                onClick={() => setForm({ ...form, mediaType: "video" })}
+              >
+                <Video className="h-4 w-4" /> Video Tutorial
+              </Button>
+              <Button
+                type="button"
+                variant={form.mediaType === "image" ? "default" : "outline"}
+                className="gap-2 text-xs justify-center"
+                onClick={() => setForm({ ...form, mediaType: "image" })}
+              >
+                <ImageIcon className="h-4 w-4" /> Gambar / Infografis
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2 pt-1 border-t">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold">Lampiran Media</Label>
+              <div className="flex items-center gap-1 bg-muted p-0.5 rounded-lg text-xs">
+                <button
+                  type="button"
+                  onClick={() => setMediaSource("upload")}
+                  className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all ${
+                    mediaSource === "upload"
+                      ? "bg-card text-foreground shadow-xs font-semibold"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Upload File
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMediaSource("url")}
+                  className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all ${
+                    mediaSource === "url"
+                      ? "bg-card text-foreground shadow-xs font-semibold"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Input URL
+                </button>
+              </div>
+            </div>
+
+            {mediaSource === "upload" ? (
+              <div>
+                <label className="border-2 border-dashed rounded-xl p-5 text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-2 block">
+                  <input
+                    type="file"
+                    accept={form.mediaType === "video" ? "video/*" : "image/*"}
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    {isReading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">
+                      {isReading ? "Sedang memproses..." : fileName || `Klik untuk upload ${form.mediaType === "video" ? "Video (MP4, WEBM)" : "Gambar (JPG, PNG, WEBP)"}`}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Maksimal 40MB</p>
+                  </div>
+                </label>
+              </div>
+            ) : (
+              <Input
+                placeholder="https://contoh.com/video.mp4 atau URL gambar"
+                value={form.mediaUrl}
+                onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })}
+                className="text-xs"
+              />
+            )}
+
+            {form.mediaUrl && (
+              <div className="mt-3 rounded-xl border bg-muted/30 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <Eye className="h-3.5 w-3.5" /> Pratinjau Media
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[10px] text-destructive hover:bg-destructive/10 px-2"
+                    onClick={() => {
+                      setForm({ ...form, mediaUrl: "" });
+                      setFileName("");
+                    }}
+                  >
+                    Hapus Media
+                  </Button>
+                </div>
+                <div className="aspect-video w-full rounded-lg overflow-hidden bg-black flex items-center justify-center">
+                  {form.mediaType === "video" ? (
+                    <video src={form.mediaUrl} controls className="w-full h-full object-contain" />
+                  ) : (
+                    <img src={form.mediaUrl} alt="Preview" className="w-full h-full object-contain" />
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="pt-2 border-t gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
+              Batal
+            </Button>
+            <Button type="submit" disabled={isSubmitting || isReading} className="gap-2">
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Menyimpan...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" /> Simpan Tutorial
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
