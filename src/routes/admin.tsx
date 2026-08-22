@@ -524,11 +524,11 @@ function AdminPage() {
         </aside>
 
         {/* Main Content Area */}
-        <main className="min-w-0 flex-1 w-full p-3 sm:p-5 lg:p-6">
-          <div className="mb-6 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <div>
+        <main className="min-w-0 flex-1 w-full max-w-full overflow-x-hidden p-3 sm:p-5 lg:p-6">
+          <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between max-w-full">
+            <div className="min-w-0 flex-1">
               <p className="eyebrow text-xs">Selamat datang kembali</p>
-              <h1 className="mt-1 font-display text-2xl text-foreground sm:text-3xl">
+              <h1 className="mt-1 font-display text-2xl text-foreground sm:text-3xl leading-snug break-words">
                 {section === "overview"
                   ? "Ringkasan Klinik"
                   : section === "reservations"
@@ -544,7 +544,7 @@ function AdminPage() {
                             : "Manajemen Pengguna"}
               </h1>
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground shrink-0">
               Perubahan tersimpan otomatis ke database.
             </p>
           </div>

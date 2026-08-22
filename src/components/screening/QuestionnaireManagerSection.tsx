@@ -418,10 +418,10 @@ export function QuestionnaireManagerSection({ onNavigate }: { onNavigate?: (sect
 
       {/* Control Bar & Action Buttons */}
       <Card className="border-border/60 shadow-xs">
-        <CardContent className="p-4 space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex flex-1 items-center gap-2">
-              <div className="relative flex-1 max-w-md">
+        <CardContent className="p-3 sm:p-4 space-y-3">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div className="flex flex-col sm:flex-row flex-1 items-stretch sm:items-center gap-2 w-full">
+              <div className="relative flex-1 min-w-0">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Cari pertanyaan, label, id, opsi..."
@@ -434,7 +434,7 @@ export function QuestionnaireManagerSection({ onNavigate }: { onNavigate?: (sect
               <select
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
-                className="h-9 rounded-md border border-input bg-card px-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                className="h-9 rounded-md border border-input bg-card px-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary shrink-0"
               >
                 <option value="all">Semua Tipe Input</option>
                 <option value="text">Teks Pendek (Text)</option>
@@ -446,11 +446,11 @@ export function QuestionnaireManagerSection({ onNavigate }: { onNavigate?: (sect
               </select>
             </div>
 
-            <div className="flex items-center flex-wrap gap-2">
+            <div className="flex items-center flex-wrap gap-2 w-full lg:w-auto">
               <Button
                 variant="outline"
                 size="sm"
-                className="text-xs h-9 gap-1.5"
+                className="text-xs h-9 gap-1.5 flex-1 sm:flex-none"
                 onClick={() =>
                   setSectionDialog({
                     isOpen: true,
@@ -466,7 +466,7 @@ export function QuestionnaireManagerSection({ onNavigate }: { onNavigate?: (sect
               <Button
                 variant="outline"
                 size="sm"
-                className="text-xs h-9 gap-1.5"
+                className="text-xs h-9 gap-1.5 flex-1 sm:flex-none"
                 onClick={() =>
                   setFieldDialog({
                     isOpen: true,
@@ -483,7 +483,7 @@ export function QuestionnaireManagerSection({ onNavigate }: { onNavigate?: (sect
               <Button
                 variant="outline"
                 size="sm"
-                className="text-xs h-9 gap-1.5 text-amber-700 hover:text-amber-800 hover:bg-amber-50"
+                className="text-xs h-9 gap-1.5 text-amber-700 hover:text-amber-800 hover:bg-amber-50 flex-1 sm:flex-none"
                 onClick={handleResetSections}
                 disabled={isResetting}
               >
@@ -493,7 +493,7 @@ export function QuestionnaireManagerSection({ onNavigate }: { onNavigate?: (sect
 
               <Button
                 size="sm"
-                className={`text-xs h-9 gap-1.5 ${
+                className={`text-xs h-9 gap-1.5 flex-1 sm:flex-none ${
                   hasUnsavedChanges
                     ? "bg-primary text-white hover:bg-primary/90 ring-2 ring-primary/30 animate-pulse"
                     : ""
@@ -511,7 +511,7 @@ export function QuestionnaireManagerSection({ onNavigate }: { onNavigate?: (sect
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-1 border-t text-[11px] text-muted-foreground">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 border-t text-[11px] text-muted-foreground">
             <div className="flex items-center gap-2">
               <span>Tampilan:</span>
               <button
@@ -554,33 +554,33 @@ export function QuestionnaireManagerSection({ onNavigate }: { onNavigate?: (sect
             return (
               <Card
                 key={sec.id}
-                className="border-border/70 shadow-xs overflow-hidden transition-all"
+                className="border-border/70 shadow-xs overflow-hidden transition-all max-w-full"
               >
                 {/* Section Header */}
-                <div className="flex items-center justify-between p-4 bg-muted/20 border-b border-border/50">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 gap-3 bg-muted/20 border-b border-border/50 max-w-full">
                   <div
-                    className="flex items-center gap-3 flex-1 cursor-pointer select-none"
+                    className="flex items-start sm:items-center gap-3 flex-1 cursor-pointer select-none min-w-0"
                     onClick={() => toggleExpand(sec.id)}
                   >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-sm">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-sm">
                       {sec.letter || String.fromCharCode(65 + secIdx)}
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-bold text-foreground hover:text-primary transition-colors">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                        <h4 className="text-sm font-bold text-foreground hover:text-primary transition-colors break-words">
                           {sec.title}
                         </h4>
                         {sec.femaleOnly && (
-                          <span className="rounded-full bg-pink-100 text-pink-700 px-2 py-0.5 text-[10px] font-semibold">
+                          <span className="rounded-full bg-pink-100 text-pink-700 px-2 py-0.5 text-[10px] font-semibold shrink-0">
                             Khusus Wanita
                           </span>
                         )}
-                        <span className="rounded-full bg-muted text-muted-foreground px-2 py-0.5 text-[10px] font-medium">
+                        <span className="rounded-full bg-muted text-muted-foreground px-2 py-0.5 text-[10px] font-medium shrink-0">
                           {fieldsCount} Soal
                         </span>
                       </div>
                       {sec.description && (
-                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 sm:line-clamp-1 break-words">
                           {sec.description}
                         </p>
                       )}
@@ -588,7 +588,7 @@ export function QuestionnaireManagerSection({ onNavigate }: { onNavigate?: (sect
                   </div>
 
                   {/* Section Actions */}
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center flex-wrap gap-1 shrink-0 self-end sm:self-center">
                     <Button
                       variant="ghost"
                       size="sm"

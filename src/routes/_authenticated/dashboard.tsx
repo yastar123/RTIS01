@@ -441,13 +441,13 @@ export function DashboardPage() {
         </aside>
 
         {/* Main Content Area */}
-        <main className="min-w-0 flex-1 w-full p-3 sm:p-5 lg:p-6">
-          <div className="mb-6 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <div>
+        <main className="min-w-0 flex-1 w-full max-w-full overflow-x-hidden p-3 sm:p-5 lg:p-6">
+          <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between max-w-full">
+            <div className="min-w-0 flex-1">
               <p className="eyebrow text-xs">
                 {isAdmin ? "Dashboard Administrator" : "Dashboard Pasien"}
               </p>
-              <h1 className="mt-1 font-display text-xl text-foreground sm:text-2xl lg:text-3xl">
+              <h1 className="mt-1 font-display text-xl text-foreground sm:text-2xl lg:text-3xl leading-snug break-words">
                 {section === "overview"
                   ? "Ringkasan Kesehatan"
                   : section === "profile"
@@ -469,11 +469,11 @@ export function DashboardPage() {
                               : "Artikel & Edukasi Kesehatan"}
               </h1>
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground shrink-0 break-all sm:break-normal">
               Selamat datang kembali,{" "}
               <span className="font-medium text-foreground">{user?.email ?? "Pengguna"}</span>
               {isAdmin && (
-                <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                <span className="ml-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
                   (Admin)
                 </span>
               )}
@@ -4106,34 +4106,34 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
           )}
           {/* Admin Mode Sub-Navigation Header */}
           {isAdmin && (
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3 max-w-full">
+              <div className="flex flex-wrap items-center gap-2 max-w-full">
                 <Button
                   variant={adminModeTab === "results" ? "default" : "outline"}
                   size="sm"
                   onClick={() => setAdminModeTab("results")}
-                  className="text-xs sm:text-sm gap-1.5"
+                  className="text-xs sm:text-sm gap-1.5 shrink-0"
                 >
                   <Stethoscope className="h-4 w-4" />
-                  Hasil Skrining Pasien ({adminScreenings.length})
+                  <span>Hasil Skrining Pasien ({adminScreenings.length})</span>
                 </Button>
                 <Button
                   variant={adminModeTab === "manage" ? "default" : "outline"}
                   size="sm"
                   onClick={() => setAdminModeTab("manage")}
-                  className="text-xs sm:text-sm gap-1.5"
+                  className="text-xs sm:text-sm gap-1.5 shrink-0"
                 >
                   <Pencil className="h-4 w-4" />
-                  Kelola Soal Skrening ({questions.length})
+                  <span>Kelola Soal Skrening ({questions.length})</span>
                 </Button>
                 <Button
                   variant={adminModeTab === "test" ? "default" : "outline"}
                   size="sm"
                   onClick={() => setAdminModeTab("test")}
-                  className="text-xs sm:text-sm gap-1.5"
+                  className="text-xs sm:text-sm gap-1.5 shrink-0"
                 >
                   <Eye className="h-4 w-4" />
-                  Uji Coba Tampilan Pasien
+                  <span>Uji Coba Tampilan Pasien</span>
                 </Button>
               </div>
               <Button
@@ -4144,7 +4144,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                   void fetchAdminScreenings();
                 }}
                 disabled={isLoading || isLoadingAdminScreenings}
-                className="text-xs text-muted-foreground gap-1.5"
+                className="text-xs text-muted-foreground gap-1.5 self-start sm:self-auto shrink-0"
               >
                 <RefreshCw
                   className={`h-3.5 w-3.5 ${
