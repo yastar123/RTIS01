@@ -1516,8 +1516,7 @@ function Skrining() {
                   <textarea
                     id="p_keluhan"
                     rows={6}
-                    required
-                    placeholder="Tuliskan paragraf rincian keluhan Anda di sini..."
+                    placeholder="Tuliskan paragraf rincian keluhan Anda di sini (opsional)..."
                     value={keluhan}
                     onChange={(e) => setKeluhan(e.target.value)}
                     className="mt-2 w-full rounded-xl border border-neutral-300 p-3.5 text-sm leading-relaxed focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-primary shadow-2xs"

@@ -3893,7 +3893,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
     answers["a3_jenis_kelamin"]?.toLowerCase().includes("perempuan") ||
     false;
   const totalScreeningQuestions = getTotalQuestionCount(isPatientFemale);
-  const isComplete = answeredCount > 0;
+  const isComplete = true; // Always allow proceeding to step 2 & 3 to generate screening results
   const calculatedTcm = calculateTcmResult(answers, totalScreeningQuestions);
   const totalScore = calculatedTcm.totalScore;
   const maxPossibleScore = 100;
@@ -4855,7 +4855,7 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                     className={`flex items-center gap-2 cursor-pointer pb-1 sm:pb-0 border-b-2 sm:border-b-0 transition-colors ${
                       screeningStep === "questions"
                         ? "border-primary text-primary font-bold"
-                        : Object.keys(answers).length === questions.length && questions.length > 0
+                        : answeredCount > 0
                           ? "border-emerald-500 text-emerald-700 font-medium"
                           : "border-transparent text-muted-foreground"
                     }`}
@@ -4864,14 +4864,12 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                       className={`h-7 w-7 rounded-full flex items-center justify-center text-xs shrink-0 ${
                         screeningStep === "questions"
                           ? "bg-primary text-primary-foreground font-bold shadow-xs"
-                          : Object.keys(answers).length === questions.length && questions.length > 0
+                          : answeredCount > 0
                             ? "bg-emerald-500 text-white"
                             : "bg-muted text-muted-foreground"
                       }`}
                     >
-                      {Object.keys(answers).length === questions.length &&
-                      questions.length > 0 &&
-                      screeningStep !== "questions" ? (
+                      {answeredCount > 0 && screeningStep !== "questions" ? (
                         <CheckCircle className="h-4 w-4" />
                       ) : (
                         "1"
@@ -4888,12 +4886,8 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                   <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 hidden sm:block" />
 
                   <div
-                    onClick={() => {
-                      if (isComplete) setScreeningStep("detail");
-                    }}
-                    className={`flex items-center gap-2 pb-1 sm:pb-0 border-b-2 sm:border-b-0 transition-colors ${
-                      !isComplete ? "cursor-not-allowed opacity-60" : "cursor-pointer"
-                    } ${
+                    onClick={() => setScreeningStep("detail")}
+                    className={`flex items-center gap-2 cursor-pointer pb-1 sm:pb-0 border-b-2 sm:border-b-0 transition-colors ${
                       screeningStep === "detail"
                         ? "border-primary text-primary font-bold"
                         : complaints || tonguePhoto
@@ -4923,16 +4917,8 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                   <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 hidden sm:block" />
 
                   <div
-                    onClick={() => {
-                      if (isComplete) setScreeningStep("confirm");
-                    }}
-                    className={`flex-1 flex items-center gap-2 pb-1 sm:pb-0 border-b-2 sm:border-b-0 transition-colors ${
-                      !isComplete ? "cursor-not-allowed opacity-60" : "cursor-pointer"
-                    } ${
-                      screeningStep === "confirm"
-                        ? "border-primary text-primary font-bold"
-                        : "border-transparent text-muted-foreground"
-                    }`}
+                    onClick={() => setScreeningStep("confirm")}
+                    className="flex-1 flex items-center gap-2 cursor-pointer pb-1 sm:pb-0 border-b-2 sm:border-b-0 transition-colors"
                   >
                     <div
                       className={`h-7 w-7 rounded-full flex items-center justify-center text-xs shrink-0 ${

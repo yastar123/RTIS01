@@ -156,7 +156,7 @@ export function TcmQuestionnaireForm({
   return (
     <div className="w-full space-y-6">
       {/* Header Banner */}
-      <div className="rounded-2xl border border-primary/20 bg-linear-to-r from-primary/10 via-emerald-500/5 to-teal-500/10 p-5 shadow-xs">
+      <div className="rounded-2xl border border-primary/20 bg-linear-to-r from-primary/10 via-emerald-500/5 to-teal-500/10 p-5 shadow-xs space-y-3">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -173,41 +173,60 @@ export function TcmQuestionnaireForm({
             </p>
           </div>
 
-          <div className="flex items-center gap-3 self-start md:self-auto bg-card/80 backdrop-blur-xs p-3 rounded-xl border shrink-0">
-            <div className="text-right">
-              <div className="text-xs font-semibold text-foreground">
-                {answeredCount} dari {totalQuestions} Terisi
+          <div className="flex flex-wrap items-center gap-3 self-start md:self-auto shrink-0">
+            <Button
+              type="button"
+              onClick={onComplete}
+              className="gap-2 text-xs sm:text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-md cursor-pointer h-10 px-4"
+            >
+              <Sparkles className="h-4 w-4" />
+              Generate Hasil Skrining ({answeredCount} Terisi)
+            </Button>
+
+            <div className="flex items-center gap-3 bg-card/80 backdrop-blur-xs p-2.5 rounded-xl border">
+              <div className="text-right">
+                <div className="text-xs font-semibold text-foreground">
+                  {answeredCount} / {totalQuestions} Terisi
+                </div>
+                <div className="text-[11px] text-muted-foreground">Kelengkapan {progressPct}%</div>
               </div>
-              <div className="text-[11px] text-muted-foreground">Kelengkapan {progressPct}%</div>
-            </div>
-            <div className="h-10 w-10 relative flex items-center justify-center">
-              <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36">
-                <path
-                  className="text-muted/40"
-                  strokeWidth="3.5"
-                  stroke="currentColor"
-                  fill="none"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                />
-                <path
-                  className="text-primary transition-all duration-500"
-                  strokeDasharray={`${progressPct}, 100`}
-                  strokeWidth="3.5"
-                  strokeLinecap="round"
-                  stroke="currentColor"
-                  fill="none"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                />
-              </svg>
-              <span className="absolute text-[10px] font-bold font-mono text-primary">
-                {progressPct}%
-              </span>
+              <div className="h-9 w-9 relative flex items-center justify-center">
+                <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36">
+                  <path
+                    className="text-muted/40"
+                    strokeWidth="3.5"
+                    stroke="currentColor"
+                    fill="none"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                  <path
+                    className="text-primary transition-all duration-500"
+                    strokeDasharray={`${progressPct}, 100`}
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                    stroke="currentColor"
+                    fill="none"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                </svg>
+                <span className="absolute text-[10px] font-bold font-mono text-primary">
+                  {progressPct}%
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
+        {/* Informational Tip Banner */}
+        <div className="flex items-center gap-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 p-2.5 text-xs text-amber-900 dark:text-amber-200">
+          <Sparkles className="h-4 w-4 text-amber-600 shrink-0" />
+          <span>
+            <strong>Fleksibel:</strong> Anda <strong>tidak wajib mengisi seluruh {totalQuestions} pertanyaan</strong>. Kapan saja Anda ingin melihat hasil diagnosa, Anda cukup menekan tombol <strong>"Generate Hasil Skrining"</strong>.
+          </span>
+        </div>
+
         {/* Global Progress Bar */}
-        <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-muted/60">
+        <div className="h-2 w-full overflow-hidden rounded-full bg-muted/60">
           <div
             className="h-full bg-linear-to-r from-primary to-emerald-500 transition-all duration-500"
             style={{ width: `${progressPct}%` }}
@@ -568,28 +587,28 @@ export function TcmQuestionnaireForm({
           Bagian {activeSectionIndex + 1} dari {visibleSections.length} ({currentSection?.title})
         </div>
 
-        {activeSectionIndex < visibleSections.length - 1 ? (
-          <Button
-            type="button"
-            onClick={handleNextSection}
-            className="w-full sm:w-auto gap-2 text-xs sm:text-sm bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
-          >
-            Lanjut ke Bagian {visibleSections[activeSectionIndex + 1]?.code} (
-            {visibleSections[activeSectionIndex + 1]?.shortTitle ||
-              visibleSections[activeSectionIndex + 1]?.title}
-            )
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        ) : (
+        <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
           <Button
             type="button"
             onClick={onComplete}
             className="w-full sm:w-auto gap-2 text-xs sm:text-sm bg-emerald-600 hover:bg-emerald-700 text-white shadow-md font-semibold cursor-pointer"
           >
-            <CheckCircle2 className="h-4 w-4" />
-            Selesai Isi Form & Lanjut ke Tahap 2
+            <Sparkles className="h-4 w-4" />
+            Generate Hasil Skrining ({answeredCount} Terisi)
           </Button>
-        )}
+
+          {activeSectionIndex < visibleSections.length - 1 && (
+            <Button
+              type="button"
+              onClick={handleNextSection}
+              variant="secondary"
+              className="w-full sm:w-auto gap-2 text-xs sm:text-sm cursor-pointer"
+            >
+              Lanjut ke Bagian {visibleSections[activeSectionIndex + 1]?.code}
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
