@@ -5718,11 +5718,11 @@ function ScreeningTab({ onNavigate }: { onNavigate: (section: Section) => void }
                 </div>
 
                 <div className="space-y-3">
-                  {TCM_SECTIONS.filter((s) => !s.femaleOnly || isPatientFemale)
+                  {TCM_SECTIONS.filter((s) => !s.isFemaleOnly || isPatientFemale)
                     .flatMap((s) =>
-                      s.questions.map((q) => ({
+                      (s.fields || []).map((q) => ({
                         ...q,
-                        sectionLetter: s.letter,
+                        sectionLetter: s.code,
                         sectionTitle: s.title,
                       })),
                     )
